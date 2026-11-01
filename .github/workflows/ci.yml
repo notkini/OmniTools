@@ -60,6 +60,9 @@ jobs:
       - name: Type check and frontend build
         run: npm run build
 
+      - name: Unit tests (vitest)
+        run: npm test
+
       - name: Rust check (compile + clippy)
         working-directory: src-tauri
         run: cargo clippy --all-targets -- -D warnings

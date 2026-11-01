@@ -1,51 +1,53 @@
 import { useState } from "react";
-import reactLogo from "../assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { Sidebar, type ViewId } from "./Sidebar";
+import { TopBar } from "./TopBar";
+import { Home } from "./Home";
+import { Settings } from "./Settings";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+/**
+ * Application shell (Milestone 2): fixed collapsible sidebar, top bar, and a
+ * scroll-owned main region. Views are local state until the tool registry
+ * and router replace them in Milestone 3.
+ */
+export default function App() {
+  const [view, setView] = useState<ViewId>("home");
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("omnitools.sidebarCollapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  const toggleCollapse = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem("omnitools.sidebarCollapsed", String(next));
+    } catch {
+      // Best-effort persistence only.
+    }
+  };
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <div className="shell">
+      <a className="skip-link" href="#main-view">
+        Skip to content
+      </a>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+      <Sidebar
+        activeView={view}
+        collapsed={collapsed}
+        onViewSelect={setView}
+        onCollapseToggle={toggleCollapse}
+      />
+
+      <div className="main-area">
+        <TopBar title={view === "home" ? "Home" : "Settings"} />
+        <main id="main-view" className="view">
+          {view === "home" ? <Home /> : <Settings />}
+        </main>
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    </div>
   );
 }
-
-export default App;

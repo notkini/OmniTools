@@ -14,7 +14,7 @@ Free, open-source, offline-first desktop application for Windows and Linux. Buil
 | Milestone | Description | Status |
 |---|---|---|
 | 1 | Environment and project validation | **In progress** — all local criteria verified (scaffold, toolchain, dev+HMR, MSI/NSIS build + install/launch test, clippy/test/fmt/build, local commit). Remaining: CI green on `windows-latest` + `ubuntu-24.04` requires a GitHub remote and push |
-| 2 | Application shell and design system | Not started |
+| 2 | Application shell and design system | **In progress** — implemented and verified at code level (all checks green, shell launches, token gate clean); visual polish review pending user confirmation |
 | 3 | Universal search and tool registry | Not started |
 | 4 | First fully functional utility (File Hasher) | Not started |
 | 5 | Additional MVP tools (Image Converter, Batch Rename, PDF Merge/Split) | Not started |
