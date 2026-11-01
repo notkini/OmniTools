@@ -133,7 +133,7 @@ Key rules:
 
 ## 3. Proposed folder structure
 
-Monorepo-lite: one Tauri app. Flat and boring on purpose.
+Monorepo-lite: one Tauri app. Flat and boring on purpose. The frontend layout was revised to a feature-oriented structure before Milestone 2 — see `docs/decisions/0002-frontend-structure.md`; directories appear only when real content exists, so futures listed below are the approved end-state.
 
 ```
 OmniTools/
@@ -154,38 +154,32 @@ OmniTools/
 │  ├─ ADDING_A_TOOL.md        # the contract any new tool must satisfy
 │  ├─ PRIVACY.md              # exact network-behaviour statement
 │  └─ decisions/              # short ADRs (Markdown) for key choices
-├─ src/                       # React/TypeScript
-│  ├─ main.tsx                # entry; StrictMode; theme boot
-│  ├─ app/                    # shell only (owns nothing tool-specific)
-│  │  ├─ App.tsx
+├─ src/                       # React/TypeScript (feature-oriented, ADR 0002)
+│  ├─ main.tsx                # SINGLE entry point; StrictMode; theme boot
+│  ├─ app/                    # application shell only (owns nothing tool-specific)
+│  │  ├─ App.tsx              # root component + co-located App.css
 │  │  ├─ Sidebar.tsx
 │  │  ├─ TopBar.tsx           # palette trigger, tool title, back
 │  │  ├─ CommandPalette.tsx
-│  │  └─ ThemeProvider.tsx    # light/dark/system; persists
-│  ├─ registry/
-│  │  ├─ types.ts             # ToolDefinition contract
-│  │  └─ registry.ts          # imports all tool manifests; derives nav, search, routes
-│  ├─ tools/                  # one folder per tool; fully self-contained
-│  │  ├─ file-hash/
-│  │  │  ├─ manifest.ts       # ToolDefinition (id, name, category, icon, keywords, accepts, route)
-│  │  │  ├─ HashTool.tsx      # workspace UI
-│  │  │  └─ index.ts          # re-export
-│  │  ├─ image-convert/
-│  │  ├─ batch-rename/
-│  │  └─ pdf-merge/
-│  ├─ shared/
-│  │  ├─ ui/                  # primitives: Button, Field, Select, Toast, Tooltip, Kbd…
-│  │  ├─ workspaces/
-│  │  │  └─ ToolWorkspace.tsx # THE reusable tool page template
-│  │  ├─ files/
-│  │  │  ├─ FileDropzone.tsx  # drag & drop + picker, file-type validation
-│  │  │  ├─ FileQueue.tsx     # rows with per-file status
-│  │  │  └─ OutputLocation.tsx
-│  │  ├─ queue/
-│  │  │  └─ store.ts          # zustand: enqueue, run, cancel, progress events
-│  │  └─ fs/                  # invoke() wrappers typed against Rust result enums
-│  ├─ routes.tsx              # maps registry → Router, lazy imports
-│  ├─ home/Home.tsx           # favorites, recents, categories
+│  │  ├─ ThemeProvider.tsx    # light/dark/system; persists
+│  │  └─ routes.tsx           # maps tool registry → Router, lazy imports
+│  ├─ components/             # generic presentational components, no business logic
+│  │  ├─ layout/              # panels, resizable areas, page scaffolding
+│  │  ├─ ui/                  # primitives: Button, IconButton, Kbd, Select, Tooltip…
+│  │  │  └─ ToolWorkspace.tsx # THE reusable tool page template (dropzone/queue/options/actions)
+│  │  └─ feedback/            # Toast, ProgressBar, inline per-file errors, EmptyState
+│  ├─ features/               # vertical slices, each self-contained
+│  │  ├─ tool-registry/       # ToolDefinition types + registry.ts (drives nav, search, home, routes)
+│  │  ├─ search/              # command palette + fuzzy matcher
+│  │  ├─ queue/               # shared batch queue store (zustand): run, cancel, progress events
+│  │  └─ tools/               # one folder per tool (file-hash, image-convert, batch-rename, pdf-merge)
+│  │     └─ file-hash/
+│  │        ├─ manifest.ts    # ToolDefinition (id, name, category, icon, keywords, accepts, route)
+│  │        ├─ HashTool.tsx   # workspace UI composed from components/ui + feedback
+│  │        └─ index.ts       # re-export
+│  ├─ services/               # typed invoke() wrappers over Rust commands (fs, dialogs, events)
+│  ├─ shared/                 # hooks/, utils/, types/, constants/ — non-UI code only
+│  ├─ assets/                 # bundled static images (vite-env.d.ts stays at src/ root)
 │  └─ styles/
 │     ├─ tokens.css           # design tokens (CSS variables)
 │     ├─ base.css
@@ -197,7 +191,6 @@ OmniTools/
 │  ├─ icons/                  # squared assets; `tauri icon` generates all
 │  └─ src/
 │     ├─ main.rs              # builder, plugins, invoke handlers
-│     ├─ error.rs             # AppError enum → serializable IPC codes
 │     ├─ commands/
 │     │  ├─ mod.rs
 │     │  ├─ hash.rs           # compute_sha256, verify
@@ -209,6 +202,8 @@ OmniTools/
 │     │  ├─ imaging.rs
 │     │  ├─ renaming.rs       # rename planner: collisions, pattern engine
 │     │  └─ pdfops.rs
+│     ├─ errors.rs            # serializable AppError model (IPC error codes)
+│     ├─ models.rs            # types crossing the IPC boundary
 │     └─ paths.rs             # output-dir policy, path validation
 ├─ tests/
 │  └─ fixtures/README.md      # explains how fixtures are generated deterministically
