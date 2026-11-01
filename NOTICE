@@ -1,0 +1,18 @@
+NOTICE
+======
+
+OmniTools Desktop
+Copyright 2026 OmniTools Desktop contributors
+
+Licensed under the Apache License, Version 2.0 (the "License").
+See LICENSE for the full licence text.
+
+Third-party dependencies carry their own licences, all of them
+Apache-2.0-compatible (MIT, Apache-2.0, BSD, ISC, Zlib, Unicode).
+A complete, generated dependency inventory will be added here as
+part of the licence-audit work in Milestone 6 (cargo-deny + npm
+licence script, per PLAN.md Section 6).
+
+Notable transitive dependencies (indicative, to be audited):
+- Tauri runtime and plugins (MIT / Apache-2.0)
+- serde / serde_json (MIT / Apache-2.0)
