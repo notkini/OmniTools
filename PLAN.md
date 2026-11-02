@@ -203,8 +203,7 @@ OmniTools/
 │     │  ├─ renaming.rs       # rename planner: collisions, pattern engine
 │     │  └─ pdfops.rs
 │     ├─ errors.rs            # serializable AppError model (IPC error codes)
-│     ├─ models.rs            # types crossing the IPC boundary
-│     └─ paths.rs             # output-dir policy, path validation
+│     └─ paths.rs             # path validation (traversal, symlink escape rejection)
 ├─ tests/
 │  └─ fixtures/README.md      # explains how fixtures are generated deterministically
 ├─ .gitignore                 # node_modules, target/, dist/, src-tauri/gen, *.local
@@ -216,7 +215,7 @@ OmniTools/
 
 ### How a new tool is added (the contract, validated by M3/M4)
 
-1. Create `src/tools/<id>/manifest.ts` implementing `ToolDefinition` — the registry does the rest (sidebar, search, home grid, route).
+1. Create `src/features/tools/<id>/manifest.ts` implementing `ToolDefinition` — the registry does the rest (sidebar, search, home grid, route).
 2. Create the tool UI by composing `ToolWorkspace` + shared file/queue components — no shell edits, no router edits.
 3. If native processing is needed: add a `processing/*.rs` pure module + tests, then a thin command in `commands/*.rs`, and list it in the one `invoke_handler` array.
 4. Nothing existing is touched except that array and `registry.ts`'s import line. `docs/ADDING_A_TOOL.md` codifies this, and a CI check (grep-based lint asserting every `src/tools/*` has a manifest) keeps it honest.
@@ -473,11 +472,12 @@ Rule of thumb: features requiring large dependencies, external executables, or m
 
 **Tasks & files:**
 
-1. `src-tauri/src/processing/hashing.rs` — streaming SHA-256, pure, unit tests with official NIST vectors; `commands/hash.rs` — `hash_files(paths) -> Vec<FileHashResult>`, `compare_files(a, b)`, progress emitted per file (bounded workers via `rayon`).
-2. `src/tools/file-hash/manifest.ts` + `HashTool.tsx` — compose ToolWorkspace: dropzone (any file), queue with per-file hash bytes → hex, compare panel (file vs pasted/file), copy-to-clipboard per row, "verify" state (match/mismatch visuals).
-3. `shared/queue/store.ts` finalized here — enqueue, run, cancel, aggregate progress, per-file states (`idle | running | done | error`), events subscription; `shared/fs/` typed invoke wrappers mapping the Rust `AppError` enum to codes the UI renders.
-4. `error.rs` — the canonical serializable error model (used by every later command).
-5. Output affordances: "copy all hashes to file" writes `checksums.txt` via the save dialog.
+1. `src-tauri/src/processing/hashing.rs` — streaming SHA-256, pure, unit tests with official NIST vectors; `commands/hash.rs` — `hash_files(paths) -> Vec<FileOutcome>`, `compare_files(a, b)`, progress emitted per file (bounded workers via `std::thread`, capped at `MAX_CONCURRENCY=4`; Rayon was considered but std::thread was used to avoid an extra dependency).
+2. `src/features/tools/file-hash/manifest.ts` + `HashTool.tsx` — compose ToolWorkspace: dropzone (any file), queue with per-file hash bytes → hex, compare panel (file vs pasted/file), copy-to-clipboard per row, "verify" state (match/mismatch visuals).
+3. `src/shared/queue/store.ts` finalized here — enqueue, run, cancel, aggregate progress, per-file states (`idle | running | done | error`), events subscription; `src/shared/fs/` typed invoke wrappers mapping the Rust `AppError` enum to codes the UI renders.
+4. `src-tauri/src/error.rs` — the canonical serializable error model (used by every later command). Named `error.rs` (singular) rather than `errors.rs` as originally drafted.
+5. `src-tauri/src/paths.rs` — path validation (traversal, symlink escape rejection) per AGENTS.md rule 7. Does not restrict user-selected files to an application root.
+6. Output affordances: "copy all hashes to file" writes `checksums.txt` via the save dialog.
 
 **Testing:** Rust unit tests (NIST vectors, large-file streaming chunking, 0-byte file), command-level integration via direct function calls; TS vitest for the queue store with a mocked-invoke adapter (proves the UI state machine without launching Tauri).
 

@@ -823,3 +823,130 @@ button.sidebar-brand {
   color: var(--text-2);
   flex-shrink: 0;
 }
+
+/* ---------- File Hasher (M4) ---------- */
+
+.status-chip--canceled {
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+}
+
+.file-queue-cell {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-queue-cell .file-name {
+  display: block;
+  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-hash {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.file-error {
+  display: block;
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+}
+
+.row-copy-button:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.hash-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--s4);
+}
+
+.hash-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.hash-panel-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s3);
+}
+
+.hash-panel-fields .field {
+  flex: 1;
+  min-width: 140px;
+  margin: 0;
+}
+
+.hash-panel-verify-field {
+  flex: 2;
+  min-width: 200px;
+}
+
+.hash-panel-verify-field .input {
+  font-family: var(--font-mono);
+}
+
+.hash-panel-action {
+  display: flex;
+}
+
+.result-banner {
+  margin: 0;
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+
+.result-banner--success {
+  color: var(--success);
+  background: var(--success-subtle);
+  border-color: transparent;
+}
+
+.result-banner--danger {
+  color: var(--danger);
+  background: var(--danger-subtle);
+  border-color: transparent;
+}

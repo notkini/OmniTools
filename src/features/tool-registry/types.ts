@@ -10,7 +10,7 @@ export type ToolRoutePath = `#/tools/${ToolId}`;
  * Topics used for sidebar grouping and search readout. Extended only when a
  * real tool needs a new one — never pre-created empty.
  */
-export type ToolCategoryId = "system";
+export type ToolCategoryId = "system" | "files";
 
 export type ToolCategory = {
   id: ToolCategoryId;

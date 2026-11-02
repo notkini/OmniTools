@@ -6,6 +6,7 @@ import type { ToolCategory, ToolCategoryId, ToolDefinition } from "./types";
  */
 const CATEGORY_LABELS: Record<ToolCategoryId, string> = {
   system: "System",
+  files: "Files",
 };
 
 export function getCategoryLabel(id: ToolCategoryId): ToolCategory["label"] {
@@ -17,8 +18,9 @@ export function getCategoryLabel(id: ToolCategoryId): ToolCategory["label"] {
  * Nothing else in the app touches tool modules.
  */
 import { tool as aboutTool } from "../tools/about";
+import { tool as fileHashTool } from "../tools/file-hash";
 
-export const TOOLS: ToolDefinition[] = [aboutTool];
+export const TOOLS: ToolDefinition[] = [fileHashTool, aboutTool];
 
 export function getTool(id: string): ToolDefinition | undefined {
   return TOOLS.find((tool) => tool.id === id);

@@ -1,13 +1,21 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-// Commands live in the `commands/` module; orchestration and registration below.
+// Tauri commands live in the `commands/` module; processing logic in
+// `processing/` is pure and unit-testable without spawning the UI.
 
 mod commands;
+mod error;
+mod paths;
+mod processing;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![commands::greet])
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![
+            commands::hash::hash_files,
+            commands::hash::hash_cancel,
+            commands::hash::compare_files,
+            commands::hash::export_checksums,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -39,6 +39,8 @@ describe("CommandPalette", () => {
   it("activates the selected result with Enter and closes", () => {
     const { onSelect, onClose } = renderPalette();
     const input = screen.getByRole("combobox");
+    // Filtering isolates About so the assertion is independent of tool order.
+    fireEvent.change(input, { target: { value: "about" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onSelect).toHaveBeenCalledWith("#/tools/about");
     expect(onClose).toHaveBeenCalled();
@@ -47,7 +49,8 @@ describe("CommandPalette", () => {
   it("moves the selection with arrow keys", () => {
     renderPalette();
     const input = screen.getByRole("combobox");
-    // Single result — ArrowDown keeps index 0 without crashing; expose via aria state.
+    // Filter to a single result, then ArrowDown keeps index 0 without crashing.
+    fireEvent.change(input, { target: { value: "about" } });
     fireEvent.keyDown(input, { key: "ArrowDown" });
     expect(input.getAttribute("aria-activedescendant")).toBe("palette-option-0");
   });
