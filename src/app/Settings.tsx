@@ -1,5 +1,6 @@
 import { useTheme } from "./ThemeProvider";
 import { Select } from "../components/ui/Select";
+import { APP_LICENCE, APP_VERSION, PRIVACY_STATEMENT } from "../shared/constants/appInfo";
 import type { ThemePreference } from "./theme";
 
 const THEME_OPTIONS: {
@@ -33,14 +34,11 @@ export function Settings() {
           <h2 className="section-title">About</h2>
           <dl className="kv">
             <dt>Version</dt>
-            <dd>0.1.0 (Milestone 2)</dd>
+            <dd>{APP_VERSION}</dd>
             <dt>Licence</dt>
-            <dd>Apache-2.0</dd>
+            <dd>{APP_LICENCE}</dd>
             <dt>Privacy</dt>
-            <dd>
-              OmniTools performs no network requests and works without an
-              account. Files are processed locally.
-            </dd>
+            <dd>{PRIVACY_STATEMENT}</dd>
           </dl>
         </section>
       </div>

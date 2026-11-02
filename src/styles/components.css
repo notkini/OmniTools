@@ -592,3 +592,234 @@
   color: var(--text);
   margin-left: 0;
 }
+
+/* ---------- Registry-driven additions (M3) ---------- */
+
+.page-title {
+  font-size: var(--fs-title);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.nav-caption {
+  padding: var(--s3) var(--s3) 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.sidebar[data-collapsed="true"] .nav-caption {
+  display: none;
+}
+
+.tool-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  text-align: left;
+  transition: background-color var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+
+.tool-row:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+
+.tool-row .tool-row-name {
+  font-weight: 600;
+}
+
+.tool-row .tool-row-description {
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-row .tool-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  flex: 1;
+}
+
+.home-tools {
+  margin-top: var(--s7);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--s2);
+}
+
+.home-tools-heading {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--s1);
+}
+
+.not-found {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding-top: var(--s7);
+}
+
+.not-found code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px var(--s2);
+}
+
+/* ---------- Command palette ---------- */
+
+.palette-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgb(0 0 0 / 0.25);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh var(--s5) var(--s5);
+}
+
+.palette {
+  width: 560px;
+  max-width: 100%;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+
+.palette-input {
+  width: 100%;
+  padding: var(--s3) var(--s4);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-body);
+}
+
+.palette-input::placeholder {
+  color: var(--text-3);
+}
+
+.palette-input:focus-visible {
+  box-shadow: none;
+}
+
+.palette-results {
+  list-style: none;
+  overflow-y: auto;
+  flex: 1;
+  padding: var(--s2);
+}
+
+.palette-option {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.palette-option[data-selected="true"] {
+  background: var(--accent-subtle);
+}
+
+.palette-option svg {
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+
+.palette-option-name {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.palette-option-description {
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.palette-empty {
+  padding: var(--s5);
+  color: var(--text-2);
+  text-align: center;
+}
+
+.palette-footer {
+  display: flex;
+  gap: var(--s4);
+  padding: var(--s2) var(--s4);
+  border-top: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+}
+
+.palette-footer span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+}
+
+/* Brand is now a button (same look as the M2 div). */
+button.sidebar-brand {
+  appearance: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  border-style: none;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-caption {
+  margin-bottom: var(--s1);
+}
+
+.home-tools-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.tool-row svg {
+  color: var(--text-2);
+  flex-shrink: 0;
+}
