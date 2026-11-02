@@ -1,7 +1,8 @@
-import { Copy, FileQuestion } from "lucide-react";
+import { Copy, Download, FileQuestion, Save } from "lucide-react";
 import { IconButton } from "./IconButton";
 
 export type FileItemStatus = "idle" | "running" | "done" | "error" | "canceled";
+export type SaveState = "ready" | "saving" | "saved" | "saveError";
 
 export interface FileQueueItem {
   id: string;
@@ -13,10 +14,14 @@ export interface FileQueueItem {
   size?: string;
   /** Lowercase hex SHA-256, shown once computed (File Hasher). */
   hex?: string;
+  /** Opaque staged-file id for save operations (Image Converter). */
+  staged_file_id?: string;
   /** Output path for converted files (Image Converter). */
   outputPath?: string;
   /** Per-file error message for status "error". */
   message?: string;
+  /** Per-file save state (Image Converter). */
+  save_state?: SaveState;
 }
 
 const STATUS_LABELS = {
@@ -39,6 +44,7 @@ interface FileQueueProps {
   items: FileQueueItem[];
   onCopyHex?: (hex: string) => void;
   onCopyPath?: (path: string) => void;
+  onSave?: (staged_file_id: string) => void;
 }
 
 /**
@@ -46,7 +52,7 @@ interface FileQueueProps {
  * A failed or canceled file never stops the batch — it is reported here
  * (PLAN §4.4 / M4 correction 1).
  */
-export function FileQueue({ items, onCopyHex, onCopyPath }: FileQueueProps) {
+export function FileQueue({ items, onCopyHex, onCopyPath, onSave }: FileQueueProps) {
   return (
     <ul className="file-queue" aria-label="File queue">
       {items.map((item) => (
@@ -87,6 +93,20 @@ export function FileQueue({ items, onCopyHex, onCopyPath }: FileQueueProps) {
               onClick={() => void onCopyPath(item.outputPath!)}
             >
               <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
+            </IconButton>
+          ) : null}
+          {item.staged_file_id && onSave ? (
+            <IconButton
+              label={`Save ${item.name}…`}
+              className="row-save-button"
+              disabled={item.save_state === "saving" || item.save_state === "saved"}
+              onClick={() => void onSave(item.staged_file_id!)}
+            >
+              {item.save_state === "saved" ? (
+                <Download size={14} strokeWidth={1.75} aria-hidden="true" />
+              ) : (
+                <Save size={14} strokeWidth={1.75} aria-hidden="true" />
+              )}
             </IconButton>
           ) : null}
           <span className={`status-chip ${STATUS_CLASSES[item.status]}`}>

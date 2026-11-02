@@ -9,12 +9,20 @@ use std::collections::{BTreeSet, VecDeque};
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use tempfile::NamedTempFile;
 
 use image::GenericImageView;
 use image::ImageEncoder;
+
+/// Counter for generating unique staged_file_ids.
+static STAGED_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+fn next_staged_id() -> String {
+    let n = STAGED_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("staged-{n}")
+}
 
 /// Hard limits — protect against decompression bombs and memory exhaustion.
 pub const MAX_IMAGE_WIDTH: u32 = 10_000;
@@ -34,6 +42,7 @@ pub enum ImageOutcome {
     Completed {
         path: PathBuf,
         output_path: PathBuf,
+        staged_file_id: String,
         input_size_bytes: u64,
         output_size_bytes: u64,
         format: ImageFormat,
@@ -130,6 +139,7 @@ impl ImageBatchShared {
 }
 
 /// Validate an output directory: must exist, be a directory, and be writable.
+#[allow(dead_code)]
 pub fn validate_output_dir(dir: &Path) -> Result<(), AppError> {
     crate::paths::validate_write_path(dir)?;
     if !dir.is_dir() {
@@ -520,6 +530,7 @@ fn process_one(
         Ok(output_size_bytes) => ImageOutcome::Completed {
             path: path.to_path_buf(),
             output_path: output_path.to_path_buf(),
+            staged_file_id: next_staged_id(),
             input_size_bytes: input_size,
             output_size_bytes,
             format: opts.output_format,
@@ -1041,6 +1052,7 @@ mod tests {
         let completed = ImageOutcome::Completed {
             path: path.clone(),
             output_path,
+            staged_file_id: "staged-0".to_string(),
             input_size_bytes: 1024,
             output_size_bytes: 512,
             format: ImageFormat::Jpeg,

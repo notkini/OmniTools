@@ -13,6 +13,8 @@ interface ToolWorkspaceProps {
   /** Rows are owned by the tool's state — empty means show the dropzone. */
   queue: FileQueueItem[];
   onCopyHex?: (hex: string) => void;
+  /** Forwarded to save buttons on queue rows (Image Converter). */
+  onSave?: (staged_file_id: string) => void;
   /** Forwarded to the dropzone's click-to-browse (injectable for tests). */
   onBrowse?: () => Promise<string[] | null>;
   /** Options panel content (real options only — no placeholder controls). */
@@ -37,6 +39,7 @@ export function ToolWorkspace({
   onFiles,
   queue,
   onCopyHex,
+  onSave,
   onBrowse,
   options,
   actionLabel,
@@ -55,7 +58,7 @@ export function ToolWorkspace({
           onBrowse={onBrowse}
         />
       ) : (
-        <FileQueue items={queue} onCopyHex={onCopyHex} />
+        <FileQueue items={queue} onCopyHex={onCopyHex} onSave={onSave} />
       )}
       {options}
       {actionLabel && onAction ? (

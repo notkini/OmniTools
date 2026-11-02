@@ -887,6 +887,33 @@ button.sidebar-brand {
   color: var(--text);
 }
 
+.row-save-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+}
+
+.row-save-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.row-save-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .hash-panels {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));

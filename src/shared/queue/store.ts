@@ -21,6 +21,8 @@ export interface QueueRow {
   status: QueueStatus;
   hex?: string;
   sizeBytes?: number;
+  /** Opaque staged-file id for save operations (Image Converter). */
+  staged_file_id?: string;
   /** Output path for converted files (Image Converter). */
   outputPath?: string;
   message?: string;
@@ -75,6 +77,7 @@ export type ImageOutcome =
       kind: "completed";
       path: string;
       output_path: string;
+      staged_file_id: string;
       input_size_bytes: number;
       output_size_bytes: number;
       format: string;
