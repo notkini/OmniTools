@@ -14,7 +14,7 @@ describe("registry integrity", () => {
 
   it("derives routePath purely from the id", () => {
     for (const tool of TOOLS) {
-      expect(tool.routePath).toBe(`#/tools/${tool.id}`);
+      expect(tool.routePath).toBe(`/tools/${tool.id}`);
     }
   });
 

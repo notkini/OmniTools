@@ -42,7 +42,7 @@ describe("CommandPalette", () => {
     // Filtering isolates About so the assertion is independent of tool order.
     fireEvent.change(input, { target: { value: "about" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(onSelect).toHaveBeenCalledWith("#/tools/about");
+    expect(onSelect).toHaveBeenCalledWith("/tools/about");
     expect(onClose).toHaveBeenCalled();
   });
 

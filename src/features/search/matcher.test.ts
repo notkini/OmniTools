@@ -10,7 +10,7 @@ function makeTool(id: string, name: string, keywords: readonly string[]): ToolDe
     category: "system",
     icon: {} as unknown as ToolDefinition["icon"],
     keywords,
-    routePath: `#/tools/${id}`,
+    routePath: `/tools/${id}`,
     load: async () => ({ default: () => null }),
   };
 }

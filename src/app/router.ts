@@ -39,8 +39,8 @@ export function parseHash(
 }
 
 export function navigateToPath(path: AppPath | string): void {
-  // Assigning "/" produces "#/" — deep links stay well-formed.
-  window.location.hash = path.startsWith("/") ? path : `/${path}`;
+  // Exactly one '#' prefix — routePath values are bare paths without '#'.
+  window.location.hash = "#" + path;
 }
 
 export function useRoute(

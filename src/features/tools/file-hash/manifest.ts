@@ -10,6 +10,6 @@ export const tool: ToolDefinition = {
   category: "files",
   icon: Hash,
   keywords: ["sha256", "hash", "checksum", "verify", "compare", "digest"],
-  routePath: "#/tools/file-hash",
+  routePath: "/tools/file-hash",
   load: async () => ({ default: HashToolPage }),
 };

@@ -1,10 +1,10 @@
 import type { LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 
-/** Stable identifier — also the URL slug: `#/tools/<id>`. Never rename an id. */
+/** Stable identifier — also the URL slug: `/tools/<id>`. Never rename an id. */
 export type ToolId = string;
 
-export type ToolRoutePath = `#/tools/${ToolId}`;
+export type ToolRoutePath = `/tools/${ToolId}`;
 
 /**
  * Topics used for sidebar grouping and search readout. Extended only when a

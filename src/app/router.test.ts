@@ -9,7 +9,7 @@ const aboutTool: ToolDefinition = {
   category: "system",
   icon: {} as unknown as ToolDefinition["icon"],
   keywords: ["about"],
-  routePath: "#/tools/about",
+  routePath: "/tools/about",
   load: async () => ({ default: () => null }),
 };
 

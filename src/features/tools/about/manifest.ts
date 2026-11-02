@@ -9,6 +9,6 @@ export const tool: ToolDefinition = {
   category: "system",
   icon: Info,
   keywords: ["version", "licence", "license", "privacy", "offline"],
-  routePath: "#/tools/about",
+  routePath: "/tools/about",
   load: async () => ({ default: AboutPage }),
 };
