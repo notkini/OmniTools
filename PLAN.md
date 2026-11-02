@@ -16,8 +16,8 @@ Free, open-source, offline-first desktop application for Windows and Linux. Buil
 | 1 | Environment and project validation | **Complete** (2026-11-02) — verified: toolchain, scaffold, dev + HMR, MSI/NSIS build + install/launch test, clippy/test/fmt/build locally; CI green on `windows-latest` and `ubuntu-24.04` for `bb7c750` (run 41432176973, all steps success; earlier run 41319754505 also green) |
 | 2 | Application shell and design system | **In progress** — implemented and verified at code level (all checks green, shell launches, token gate clean); visual polish review pending user confirmation |
 | 3 | Universal search and tool registry | **Complete** (2026-11-02) — registry single source of truth; in-app hash router (React Router deliberately skipped: one flat destination level, documented in `src/app/router.ts`); Ctrl+K/Ctrl+P palette with ARIA combobox + keyboard flows; About registered as first tool entry; scratch-tool exercise verified (new tool = its folder + registry import only); 33 vitest tests + tsc + clippy/fmt/test + token gate green; dev launch + HMR verified. Recents/favorites deferred to M4 (fake with one registered entry) |
-| 4 | First fully functional utility (File Hasher) | Not started |
-| 5 | Additional MVP tools (Image Converter, Batch Rename, PDF Merge/Split) | Not started |
+| 4 | First fully functional utility (File Hasher) | **Complete** (2026-11-02) — committed at `7334ecb`; verified locally: cargo test (46 passed), cargo clippy/fmt clean, npm test (55 passed), npm run build clean, tauri dev launches. |
+| 5 | Additional MVP tools (Image Converter, Batch Rename, PDF Merge/Split) | **In progress** — Image Converter implemented and locally verified: cargo test (62 passed total incl. 16 new imaging tests), cargo clippy/fmt clean, npm test (64 passed across 9 files), npm run build clean, tauri dev launches. Awaiting CI green on windows-latest + ubuntu-24.04 before marking complete. Batch Rename, PDF Merge/Split not started. |
 | 6 | Testing, packaging, and release preparation | Not started |
 
 ---

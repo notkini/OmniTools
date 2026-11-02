@@ -51,3 +51,13 @@ export async function pickSaveDestination(): Promise<string | null> {
     filters: [{ name: "Checksum file", extensions: ["txt"] }],
   });
 }
+
+/** Native directory selection for output destination. Null = dismissed. */
+export async function pickDirectory(): Promise<string | null> {
+  const selection = await open({
+    directory: true,
+    title: "Choose output folder",
+  });
+  if (selection === null) return null;
+  return Array.isArray(selection) ? selection[0] : selection;
+}

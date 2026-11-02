@@ -21,6 +21,8 @@ export interface QueueRow {
   status: QueueStatus;
   hex?: string;
   sizeBytes?: number;
+  /** Output path for converted files (Image Converter). */
+  outputPath?: string;
   message?: string;
 }
 
@@ -55,6 +57,33 @@ export interface HashProgressPayload {
   message?: string;
 }
 
+/** Wire shape of `omnitools://image-progress` payloads. */
+export interface ImageProgressPayload {
+  jobId: string;
+  path: string;
+  phase: "started" | "completed" | "error" | "canceled";
+  inputSizeBytes?: number;
+  outputSizeBytes?: number;
+  outputPath?: string;
+  code?: string;
+  message?: string;
+}
+
+/** Wire shape of `convert_files`' authoritative return value. */
+export type ImageOutcome =
+  | {
+      kind: "completed";
+      path: string;
+      output_path: string;
+      input_size_bytes: number;
+      output_size_bytes: number;
+      format: string;
+      width: number;
+      height: number;
+    }
+  | { kind: "failed"; path: string; error: { code: AppErrorCode; message: string } }
+  | { kind: "canceled"; path: string };
+
 export type QueueInvoke = (
   command: string,
   args?: Record<string, unknown>,
@@ -70,6 +99,12 @@ export interface QueueStoreOptions {
   listen: QueueListen;
   /** Jobs get fresh ids every run; injectable for deterministic tests. */
   makeJobId?: () => string;
+  /** Command for batch processing (default: "hash_files"). */
+  command?: string;
+  /** Command for cancellation (default: "hash_cancel"). */
+  cancelCommand?: string;
+  /** Progress event name (default: "omnitools://hash-progress"). */
+  progressEvent?: string;
 }
 
 export interface QueueStore {
@@ -78,7 +113,7 @@ export interface QueueStore {
   /** Adds absolute paths; duplicates in the queue are ignored. */
   addPaths(paths: readonly string[]): void;
   /** Subscribes to progress events BEFORE invoking the batch. */
-  run(): Promise<void>;
+  run(extraArgs?: Record<string, unknown>): Promise<void>;
   cancel(): Promise<void>;
   /** Clears all rows (only while not running). */
   reset(): void;
@@ -99,6 +134,10 @@ export function createQueueStore(options: QueueStoreOptions): QueueStore {
   if (typeof makeJobId !== "function") {
     throw new Error("createQueueStore requires an explicit makeJobId factory");
   }
+
+  const command = options.command ?? HASH_COMMAND;
+  const cancelCommand = options.cancelCommand ?? HASH_CANCEL_COMMAND;
+  const progressEvent = options.progressEvent ?? HASH_PROGRESS_EVENT;
 
   let rows: QueueRow[] = [];
   let phase: JobPhase = "idle";
@@ -141,7 +180,7 @@ export function createQueueStore(options: QueueStoreOptions): QueueStore {
       }
       emit();
     },
-    async run(): Promise<void> {
+    async run(extraArgs?: Record<string, unknown>): Promise<void> {
       if (phase === "running") return;
       const pendingRows = rows.filter((row) => row.status === "idle");
       if (pendingRows.length === 0) return;
@@ -155,22 +194,23 @@ export function createQueueStore(options: QueueStoreOptions): QueueStore {
       try {
         // Correction 3: attach the progress listener BEFORE invoking the
         // batch — early events can never be missed this way.
-        unlisten = await options.listen(HASH_PROGRESS_EVENT, (payload) => {
+        unlisten = await options.listen(progressEvent, (payload) => {
           if (
             typeof payload === "object" &&
             payload !== null &&
             "phase" in payload &&
-            (payload as HashProgressPayload).jobId === runJobId
+            (payload as ImageProgressPayload).jobId === runJobId
           ) {
-            applyProgress(payload as HashProgressPayload);
+            applyProgress(payload as ImageProgressPayload);
           }
         });
 
         const paths = pendingRows.map((row) => row.path);
-        const outcomes = (await options.invoke(HASH_COMMAND, {
+        const outcomes = (await options.invoke(command, {
           jobId: runJobId,
           paths,
-        })) as readonly HashOutcome[];
+          ...extraArgs,
+        })) as readonly ImageOutcome[];
         reconcile(pendingRows, outcomes, paths);
         phase = "finished";
       } catch (error) {
@@ -198,7 +238,7 @@ export function createQueueStore(options: QueueStoreOptions): QueueStore {
     async cancel(): Promise<void> {
       if (phase !== "running" || jobId === null) return;
       try {
-        await options.invoke(HASH_CANCEL_COMMAND, { jobId });
+        await options.invoke(cancelCommand, { jobId });
       } catch {
         // A batch that already finished cannot be cancelled — safely ignored.
       }
@@ -210,7 +250,7 @@ export function createQueueStore(options: QueueStoreOptions): QueueStore {
     },
   };
 
-  const applyProgress = (event: HashProgressPayload) => {
+  const applyProgress = (event: HashProgressPayload | ImageProgressPayload) => {
     switch (event.phase) {
       case "started":
         patchRow(event.path, (row) => ({ ...row, status: "running" }));
@@ -219,8 +259,13 @@ export function createQueueStore(options: QueueStoreOptions): QueueStore {
         patchRow(event.path, (row) => ({
           ...row,
           status: "done",
-          hex: event.hex,
-          sizeBytes: event.sizeBytes,
+          // Hash progress uses hex/sizeBytes; image progress uses outputPath/outputSizeBytes.
+          ...(event as ImageProgressPayload).outputPath !== undefined
+            ? { outputPath: (event as ImageProgressPayload).outputPath }
+            : { hex: (event as HashProgressPayload).hex },
+          ...(event as ImageProgressPayload).outputSizeBytes !== undefined
+            ? { sizeBytes: (event as ImageProgressPayload).outputSizeBytes }
+            : { sizeBytes: (event as HashProgressPayload).sizeBytes },
           message: undefined,
         }));
         break;
@@ -241,7 +286,7 @@ export function createQueueStore(options: QueueStoreOptions): QueueStore {
   /** Final authoritative reconciliation from the command's return value. */
   const reconcile = (
     pendingRows: readonly QueueRow[],
-    outcomes: readonly HashOutcome[],
+    outcomes: readonly (HashOutcome | ImageOutcome)[],
     batchPaths: readonly string[],
   ) => {
     const reported = new Set<string>();
@@ -251,6 +296,17 @@ export function createQueueStore(options: QueueStoreOptions): QueueStore {
       reported.add(outcome.path);
       patchRow(outcome.path, (row) => {
         if (outcome.kind === "completed") {
+          if ("output_path" in outcome) {
+            // ImageOutcome — output_path / output_size_bytes
+            return {
+              ...row,
+              status: "done",
+              outputPath: outcome.output_path,
+              sizeBytes: outcome.output_size_bytes,
+              message: undefined,
+            };
+          }
+          // HashOutcome — hex / sizeBytes
           return { ...row, status: "done", hex: outcome.hex, sizeBytes: outcome.sizeBytes };
         }
         if (outcome.kind === "failed") {
@@ -271,7 +327,7 @@ export function createQueueStore(options: QueueStoreOptions): QueueStore {
         patchRow(row.path, (current) => ({
           ...current,
           status: "error",
-          message: "The hashing job did not report a result for this file.",
+          message: "The batch job did not report a result for this file.",
         }));
       }
     }

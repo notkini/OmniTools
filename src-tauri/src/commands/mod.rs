@@ -2,3 +2,4 @@
 //! One module per domain as the backend grows: hash.rs, image.rs, rename.rs, pdf.rs.
 
 pub mod hash;
+pub mod image;

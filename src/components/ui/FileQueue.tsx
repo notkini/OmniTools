@@ -11,8 +11,10 @@ export interface FileQueueItem {
   status: FileItemStatus;
   /** Human-formatted size, e.g. "8.4 MB". Optional per row. */
   size?: string;
-  /** Lowercase hex SHA-256, shown once computed. */
+  /** Lowercase hex SHA-256, shown once computed (File Hasher). */
   hex?: string;
+  /** Output path for converted files (Image Converter). */
+  outputPath?: string;
   /** Per-file error message for status "error". */
   message?: string;
 }
@@ -36,6 +38,7 @@ const STATUS_CLASSES = {
 interface FileQueueProps {
   items: FileQueueItem[];
   onCopyHex?: (hex: string) => void;
+  onCopyPath?: (path: string) => void;
 }
 
 /**
@@ -43,7 +46,7 @@ interface FileQueueProps {
  * A failed or canceled file never stops the batch — it is reported here
  * (PLAN §4.4 / M4 correction 1).
  */
-export function FileQueue({ items, onCopyHex }: FileQueueProps) {
+export function FileQueue({ items, onCopyHex, onCopyPath }: FileQueueProps) {
   return (
     <ul className="file-queue" aria-label="File queue">
       {items.map((item) => (
@@ -73,6 +76,15 @@ export function FileQueue({ items, onCopyHex }: FileQueueProps) {
               label={`Copy SHA-256 of ${item.name}`}
               className="row-copy-button"
               onClick={() => void onCopyHex(item.hex!)}
+            >
+              <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
+            </IconButton>
+          ) : null}
+          {item.outputPath && onCopyPath ? (
+            <IconButton
+              label={`Copy output path of ${item.name}`}
+              className="row-copy-button"
+              onClick={() => void onCopyPath(item.outputPath!)}
             >
               <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
             </IconButton>

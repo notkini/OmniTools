@@ -15,6 +15,9 @@ pub fn run() {
             commands::hash::hash_cancel,
             commands::hash::compare_files,
             commands::hash::export_checksums,
+            commands::image::convert_files,
+            commands::image::image_cancel,
+            commands::image::image_limits,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

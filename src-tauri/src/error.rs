@@ -1,14 +1,19 @@
 //! Canonical, serializable error model shared by every command (PLAN M4 task 4).
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::io;
 use std::path::Path;
 
+impl From<image::ImageError> for AppError {
+    fn from(error: image::ImageError) -> Self {
+        AppError::new(AppErrorCode::Io, format!("image error: {error}"))
+    }
+}
 /// Closed set of machine-readable codes. Adding a variant requires updating
 /// the exhaustive frontend mapping in `src/shared/fs/errors.ts` — that is the
 /// contract, not a suggestion.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AppErrorCode {
     NotFound,
@@ -19,7 +24,7 @@ pub enum AppErrorCode {
     Io,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppError {
     pub code: AppErrorCode,

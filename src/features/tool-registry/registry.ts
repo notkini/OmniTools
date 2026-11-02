@@ -19,8 +19,9 @@ export function getCategoryLabel(id: ToolCategoryId): ToolCategory["label"] {
  */
 import { tool as aboutTool } from "../tools/about";
 import { tool as fileHashTool } from "../tools/file-hash";
+import { tool as imageConvertTool } from "../tools/image-convert";
 
-export const TOOLS: ToolDefinition[] = [fileHashTool, aboutTool];
+export const TOOLS: ToolDefinition[] = [fileHashTool, imageConvertTool, aboutTool];
 
 export function getTool(id: string): ToolDefinition | undefined {
   return TOOLS.find((tool) => tool.id === id);

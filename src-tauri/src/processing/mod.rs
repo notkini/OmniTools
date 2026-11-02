@@ -2,3 +2,4 @@
 
 pub mod batching;
 pub mod hashing;
+pub mod imaging;
