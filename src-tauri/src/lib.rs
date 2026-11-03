@@ -24,6 +24,9 @@ pub fn run() {
             commands::image::save_converted,
             commands::image::save_all_converted,
             commands::image::discard_staged,
+            commands::rename::plan_rename,
+            commands::rename::apply_rename,
+            commands::rename::undo_rename,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

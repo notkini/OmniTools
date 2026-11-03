@@ -2,6 +2,15 @@ import type { ReactNode } from "react";
 import { FileDropzone } from "./FileDropzone";
 import { FileQueue, type FileQueueItem } from "./FileQueue";
 
+/** Shape of one live-preview row, shared by tools that use the preview region. */
+export interface PreviewRow {
+  original: string;
+  proposed: string;
+  status: "ok" | "conflict" | "unchanged";
+  reason: string;
+  skipped: boolean;
+}
+
 interface ToolWorkspaceProps {
   /** Dropzone copy, e.g. "Drop files or click to browse". */
   dropLabel: string;
@@ -28,6 +37,13 @@ interface ToolWorkspaceProps {
   actionDisabled?: boolean;
   /** Secondary actions (Cancel / Export) rendered beside the primary. */
   secondaryActions?: ReactNode;
+  /**
+   * Optional live preview region. Only tools that define it render this panel;
+   * existing tools continue to work with `undefined` here (backward-compatible).
+   */
+  preview?: ReactNode;
+  /** Used as the `aria-label` for the preview table when provided. */
+  previewAriaLabel?: string;
 }
 
 /**
@@ -54,11 +70,14 @@ export function ToolWorkspace({
   onAction,
   actionDisabled = false,
   secondaryActions,
+  preview,
+  previewAriaLabel,
 }: ToolWorkspaceProps) {
   const hasQueue = queue.length > 0;
   return (
     <div className="tool-workspace">
       {hasQueue ? <FileQueue items={queue} onCopyHex={onCopyHex} onCopyPath={onCopyPath} onSave={onSave} onRemove={onRemove} /> : null}
+      {preview}
       <FileDropzone
         label={hasQueue ? "Add more files" : dropLabel}
         formatHint={formatHint}

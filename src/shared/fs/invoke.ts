@@ -43,6 +43,17 @@ export async function pickFiles(): Promise<string[] | null> {
   return Array.isArray(selection) ? selection : [selection];
 }
 
+/** Native multi-file selection for rename. Returns absolute paths, or null
+ * when the dialog was dismissed — dismissing must never enqueue rows. */
+export async function pickRenameFiles(): Promise<string[] | null> {
+  const selection = await open({
+    multiple: true,
+    title: "Choose files to rename",
+  });
+  if (selection === null) return null;
+  return Array.isArray(selection) ? selection : [selection];
+}
+
 /** Native save dialog for checksum export. Null = dismissed. */
 export async function pickSaveDestination(): Promise<string | null> {
   return save({

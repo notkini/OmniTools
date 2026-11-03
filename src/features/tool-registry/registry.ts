@@ -18,10 +18,16 @@ export function getCategoryLabel(id: ToolCategoryId): ToolCategory["label"] {
  * Nothing else in the app touches tool modules.
  */
 import { tool as aboutTool } from "../tools/about";
+import { tool as batchRenameTool } from "../tools/batch-rename";
 import { tool as fileHashTool } from "../tools/file-hash";
 import { tool as imageConvertTool } from "../tools/image-convert";
 
-export const TOOLS: ToolDefinition[] = [fileHashTool, imageConvertTool, aboutTool];
+export const TOOLS: ToolDefinition[] = [
+  fileHashTool,
+  imageConvertTool,
+  batchRenameTool,
+  aboutTool,
+];
 
 export function getTool(id: string): ToolDefinition | undefined {
   return TOOLS.find((tool) => tool.id === id);
