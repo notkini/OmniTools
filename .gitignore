@@ -36,3 +36,5 @@ Thumbs.db
 coverage/
 
 .kilo/
+
+test-images

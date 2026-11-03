@@ -10,11 +10,14 @@ interface ToolWorkspaceProps {
   multiple?: boolean;
   /** Receives absolute filesystem paths — processing happens in Rust. */
   onFiles: (paths: string[]) => void;
-  /** Rows are owned by the tool's state — empty means show the dropzone. */
+  /** Rows are owned by the tool's state; may be empty. */
   queue: FileQueueItem[];
   onCopyHex?: (hex: string) => void;
+  onCopyPath?: (path: string) => void;
   /** Forwarded to save buttons on queue rows (Image Converter). */
-  onSave?: (staged_file_id: string) => void;
+  onSave?: (stagedFileId: string) => void;
+  /** Forwarded to remove buttons on queue rows (Image Converter). */
+  onRemove?: (path: string) => void;
   /** Forwarded to the dropzone's click-to-browse (injectable for tests). */
   onBrowse?: () => Promise<string[] | null>;
   /** Options panel content (real options only — no placeholder controls). */
@@ -31,6 +34,9 @@ interface ToolWorkspaceProps {
  * THE reusable tool page template (PLAN §4.2). Every tool renders inside
  * these regions: dropzone → queue → options → action bar. Tools must not
  * invent their own layout.
+ *
+ * The dropzone stays available while the queue is non-empty (compact
+ * variant) so users can always append more files to a finished batch.
  */
 export function ToolWorkspace({
   dropLabel,
@@ -39,7 +45,9 @@ export function ToolWorkspace({
   onFiles,
   queue,
   onCopyHex,
+  onCopyPath,
   onSave,
+  onRemove,
   onBrowse,
   options,
   actionLabel,
@@ -47,19 +55,18 @@ export function ToolWorkspace({
   actionDisabled = false,
   secondaryActions,
 }: ToolWorkspaceProps) {
+  const hasQueue = queue.length > 0;
   return (
     <div className="tool-workspace">
-      {queue.length === 0 ? (
-        <FileDropzone
-          label={dropLabel}
-          formatHint={formatHint}
-          multiple={multiple}
-          onFiles={onFiles}
-          onBrowse={onBrowse}
-        />
-      ) : (
-        <FileQueue items={queue} onCopyHex={onCopyHex} onSave={onSave} />
-      )}
+      {hasQueue ? <FileQueue items={queue} onCopyHex={onCopyHex} onCopyPath={onCopyPath} onSave={onSave} onRemove={onRemove} /> : null}
+      <FileDropzone
+        label={hasQueue ? "Add more files" : dropLabel}
+        formatHint={formatHint}
+        multiple={multiple}
+        compact={hasQueue}
+        onFiles={onFiles}
+        onBrowse={onBrowse}
+      />
       {options}
       {actionLabel && onAction ? (
         <div className="action-bar">

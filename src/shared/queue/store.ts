@@ -21,10 +21,16 @@ export interface QueueRow {
   status: QueueStatus;
   hex?: string;
   sizeBytes?: number;
-  /** Opaque staged-file id for save operations (Image Converter). */
-  staged_file_id?: string;
+  /** Image format, e.g. "PNG", "JPEG", "WebP". Optional per row. */
+  format?: string;
+  /** Image dimensions, e.g. "1920 × 1080". Optional per row. */
+  dimensions?: string;
+  /** Opaque staged-file id for save operations (Image Converter).
+   * Mirrors Rust's `stagedFileId` wire field. */
+  stagedFileId?: string;
   /** Output path for converted files (Image Converter). */
   outputPath?: string;
+  /** Per-file error message for status "error". */
   message?: string;
 }
 
@@ -67,19 +73,24 @@ export interface ImageProgressPayload {
   inputSizeBytes?: number;
   outputSizeBytes?: number;
   outputPath?: string;
+  format?: string;
+  width?: number;
+  height?: number;
   code?: string;
   message?: string;
 }
 
-/** Wire shape of `convert_files`' authoritative return value. */
+/** Wire shape of `convert_files`' authoritative return value.
+ * Matched to Rust's `ImageOutcome` exactly: `kind` discriminates, and the
+ * struct fields serialize camelCase (`#[serde(rename_all = "camelCase")]`). */
 export type ImageOutcome =
   | {
       kind: "completed";
       path: string;
-      output_path: string;
-      staged_file_id: string;
-      input_size_bytes: number;
-      output_size_bytes: number;
+      outputPath: string;
+      stagedFileId: string;
+      inputSizeBytes: number;
+      outputSizeBytes: number;
       format: string;
       width: number;
       height: number;
@@ -118,6 +129,8 @@ export interface QueueStore {
   /** Subscribes to progress events BEFORE invoking the batch. */
   run(extraArgs?: Record<string, unknown>): Promise<void>;
   cancel(): Promise<void>;
+  /** Removes a single row by path (only while not running). */
+  removePath(path: string): void;
   /** Clears all rows (only while not running). */
   reset(): void;
 }
@@ -210,9 +223,12 @@ export function createQueueStore(options: QueueStoreOptions): QueueStore {
 
         const paths = pendingRows.map((row) => row.path);
         const outcomes = (await options.invoke(command, {
-          jobId: runJobId,
-          paths,
-          ...extraArgs,
+            // Tauri v2 commands match camelCase JS keys to snake_case Rust
+            // parameter names — `job_id` would silently fail to bind. This
+            // key is the one M4 verified end-to-end.
+            jobId: runJobId,
+            paths,
+            ...extraArgs,
         })) as readonly ImageOutcome[];
         reconcile(pendingRows, outcomes, paths);
         phase = "finished";
@@ -227,7 +243,7 @@ export function createQueueStore(options: QueueStoreOptions): QueueStore {
               status: "error",
               message:
                 toolError.message ||
-                `Hashing failed before this file reported (${describeAppErrorCode(toolError.code)}).`,
+                `The batch failed before this file reported (${describeAppErrorCode(toolError.code)}).`,
             }));
           }
         }
@@ -251,6 +267,11 @@ export function createQueueStore(options: QueueStoreOptions): QueueStore {
       rows = [];
       emit();
     },
+    removePath(path: string) {
+      if (phase === "running") return;
+      rows = rows.filter((row) => row.path !== path);
+      emit();
+    },
   };
 
   const applyProgress = (event: HashProgressPayload | ImageProgressPayload) => {
@@ -262,13 +283,20 @@ export function createQueueStore(options: QueueStoreOptions): QueueStore {
         patchRow(event.path, (row) => ({
           ...row,
           status: "done",
-          // Hash progress uses hex/sizeBytes; image progress uses outputPath/outputSizeBytes.
+          // Hash progress uses hex/sizeBytes; image progress uses outputPath/outputSizeBytes/format/dimensions.
           ...(event as ImageProgressPayload).outputPath !== undefined
             ? { outputPath: (event as ImageProgressPayload).outputPath }
             : { hex: (event as HashProgressPayload).hex },
           ...(event as ImageProgressPayload).outputSizeBytes !== undefined
             ? { sizeBytes: (event as ImageProgressPayload).outputSizeBytes }
             : { sizeBytes: (event as HashProgressPayload).sizeBytes },
+          ...((event as ImageProgressPayload).format !== undefined
+            ? { format: (event as ImageProgressPayload).format! }
+            : {}),
+          ...((event as ImageProgressPayload).width !== undefined &&
+          (event as ImageProgressPayload).height !== undefined
+            ? { dimensions: `${(event as ImageProgressPayload).width} × ${(event as ImageProgressPayload).height}` }
+            : {}),
           message: undefined,
         }));
         break;
@@ -299,13 +327,17 @@ export function createQueueStore(options: QueueStoreOptions): QueueStore {
       reported.add(outcome.path);
       patchRow(outcome.path, (row) => {
         if (outcome.kind === "completed") {
-          if ("output_path" in outcome) {
-            // ImageOutcome — output_path / output_size_bytes
+          if ("outputPath" in outcome && "stagedFileId" in outcome) {
+            // ImageOutcome — camelCase wire fields (see type above). The
+            // stagedFileId MUST reach the row: save buttons key on it.
             return {
               ...row,
               status: "done",
-              outputPath: outcome.output_path,
-              sizeBytes: outcome.output_size_bytes,
+              outputPath: outcome.outputPath,
+              stagedFileId: outcome.stagedFileId,
+              sizeBytes: outcome.outputSizeBytes,
+              format: outcome.format,
+              dimensions: `${outcome.width} × ${outcome.height}`,
               message: undefined,
             };
           }

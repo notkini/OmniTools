@@ -255,13 +255,19 @@ fn decode_image(path: &Path, cancel: &AtomicBool) -> Result<image::DynamicImage,
             .map_err(|e| {
                 AppError::new(
                     AppErrorCode::InvalidInput,
-                    format!("{}: {e}", path.display()),
+                    format!(
+                        "cannot read as an image (only PNG, JPEG and WebP are accepted): {} ({e})",
+                        path.display()
+                    ),
                 )
             })?;
         reader.into_dimensions().map_err(|e| {
             AppError::new(
                 AppErrorCode::InvalidInput,
-                format!("{}: {e}", path.display()),
+                format!(
+                    "cannot read as an image (only PNG, JPEG and WebP are accepted): {} ({e})",
+                    path.display()
+                ),
             )
         })?
     };
@@ -304,18 +310,31 @@ fn decode_image(path: &Path, cancel: &AtomicBool) -> Result<image::DynamicImage,
         return Err(AppError::new(AppErrorCode::Canceled, "canceled"));
     }
 
-    // Second pass: decode the image.
+    // Second pass: decode the image. Real decoding failures (truncated
+    // files, disguised extensions) report as invalid input, not io errors.
     let img = image::ImageReader::open(path)
         .map_err(|e| AppError::from_io_with_path(&e, path))?
         .with_guessed_format()
         .map_err(|e| {
             AppError::new(
                 AppErrorCode::InvalidInput,
-                format!("{}: {e}", path.display()),
+                format!(
+                    "cannot read as an image (only PNG, JPEG and WebP are accepted): {} ({e})",
+                    path.display()
+                ),
             )
         })?
         .decode()
-        .map_err(AppError::from)?;
+        .map_err(|error| match error {
+            image::ImageError::Decoding(_) | image::ImageError::Limits(_) => AppError::new(
+                AppErrorCode::InvalidInput,
+                format!(
+                    "cannot decode as an image (only PNG, JPEG and WebP are accepted): {}",
+                    path.display()
+                ),
+            ),
+            other => AppError::from(other),
+        })?;
 
     if cancel.load(Ordering::Relaxed) {
         return Err(AppError::new(AppErrorCode::Canceled, "canceled"));
@@ -1175,5 +1194,393 @@ mod tests {
                 .all(|o| matches!(o, ImageOutcome::Completed { .. })),
             "all should complete"
         );
+    }
+
+    /// ===== Real-fixture conversion matrix against ../test-images =====
+    ///
+    /// Drives the exact production pipeline (`convert_batch`) with real
+    /// image files on disk (created once into ../test-images, committed to
+    /// nobody — regenerated deterministically), then verifies saved outputs
+    /// through the real staging logic the save commands use.
+    mod real_fixtures {
+        use super::*;
+        use image::DynamicImage;
+        use std::fs;
+        use std::sync::atomic::AtomicBool;
+
+        /// All fixtures share one directory, and tests run in parallel —
+        /// rewriting a fixture while another test reads it would race.
+        /// Holding this lock for the whole serializes fixture access.
+        fn fixture_lock() -> std::sync::MutexGuard<'static, ()> {
+            static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+            LOCK.get_or_init(|| std::sync::Mutex::new(()))
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+        }
+
+        fn fixture_root() -> PathBuf {
+            let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("test-images");
+            fs::create_dir_all(&root).expect("create test-images");
+            // `CARGO_MANIFEST_DIR/../test-images` carries a literal `..`
+            // component that the real read-path validator must reject; the
+            // OS file dialogs always produce canonical absolute paths, so
+            // canonicalize here to exercise the production path shape.
+            fs::canonicalize(&root).expect("canonicalize test-images")
+        }
+
+        /// Deterministic fixtures — a red landscape PNG, a gradient portrait
+        /// JPEG, a solid WebP, plus a deliberately non-image text file.
+        fn generate_fixtures() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
+            let root = fixture_root();
+
+            let png_path = root.join("red_64x48.png");
+            let jpg_path = root.join("gradient_48x64.jpg");
+            let webp_path = root.join("blue_64x48.webp");
+            let txt_path = root.join("plain.txt");
+
+            let mut red = image::RgbImage::new(64, 48);
+            for (_, _, pixel) in red.enumerate_pixels_mut() {
+                *pixel = image::Rgb([200, 20, 20]);
+            }
+            DynamicImage::ImageRgb8(red)
+                .save_with_format(&png_path, image::ImageFormat::Png)
+                .expect("write PNG fixture");
+
+            let mut gradient = image::RgbImage::new(48, 64);
+            for (x, y, pixel) in gradient.enumerate_pixels_mut() {
+                *pixel = image::Rgb([((x * 255) / 48) as u8, ((y * 255) / 64) as u8, 128]);
+            }
+            DynamicImage::ImageRgb8(gradient)
+                .save_with_format(&jpg_path, image::ImageFormat::Jpeg)
+                .expect("write JPEG fixture");
+
+            let mut blue = image::RgbImage::new(64, 48);
+            for (_, _, pixel) in blue.enumerate_pixels_mut() {
+                *pixel = image::Rgb([20, 20, 200]);
+            }
+            DynamicImage::ImageRgb8(blue)
+                .save_with_format(&webp_path, image::ImageFormat::WebP)
+                .expect("write WebP fixture");
+
+            fs::write(&txt_path, b"definitely not an image").expect("write invalid fixture");
+            (png_path, jpg_path, webp_path, txt_path)
+        }
+
+        fn is_png_magic(data: &[u8]) -> bool {
+            data.starts_with(b"\x89PNG\r\n\x1a\n")
+        }
+
+        fn is_jpeg_magic(data: &[u8]) -> bool {
+            data.starts_with(&[0xFF, 0xD8, 0xFF])
+        }
+
+        fn is_webp_magic(data: &[u8]) -> bool {
+            data.len() >= 12 && data[0..4] == *b"RIFF" && data[8..12] == *b"WEBP"
+        }
+
+        fn decoded_dimensions(path: &Path) -> Option<(u32, u32)> {
+            image::ImageReader::open(path)
+                .ok()?
+                .with_guessed_format()
+                .ok()?
+                .decode()
+                .ok()
+                .map(|img| img.dimensions())
+        }
+
+        fn run_one(path: &Path, output_dir: &Path, opts: &ConvertOpts) -> ImageOutcome {
+            let outcomes = convert_batch(
+                &[path.to_path_buf()],
+                output_dir,
+                opts,
+                4,
+                Arc::new(AtomicBool::new(false)),
+                Arc::new(ImageHooks::quiet()),
+            );
+            outcomes.into_iter().next().expect("one outcome")
+        }
+
+        #[test]
+        fn test_images_fixture_generation() {
+            let _guard = fixture_lock();
+            let (png_path, jpg_path, webp_path, txt_path) = generate_fixtures();
+            assert!(png_path.is_file(), "PNG fixture exists in test-images/");
+            assert!(jpg_path.is_file(), "JPEG fixture exists in test-images/");
+            assert!(webp_path.is_file(), "WebP fixture exists in test-images/");
+            assert!(txt_path.is_file(), "invalid fixture exists in test-images/");
+            assert!(decoded_dimensions(&png_path) == Some((64, 48)));
+            assert!(decoded_dimensions(&jpg_path) == Some((48, 64)));
+            assert!(
+                decoded_dimensions(&webp_path) == Some((64, 48)),
+                "WebP round-trips through the real encoder"
+            );
+        }
+
+        #[test]
+        fn png_to_jpeg_real_file() {
+            let _guard = fixture_lock();
+            let (png_path, _jpg, _webp, _txt) = generate_fixtures();
+            let original = fs::read(&png_path).expect("original readable");
+            let output_dir = tempfile::tempdir().expect("tempdir");
+            let opts = ConvertOpts {
+                output_format: ImageFormat::Jpeg,
+                quality: Some(85),
+                resize: None,
+            };
+            match run_one(&png_path, output_dir.path(), &opts) {
+                ImageOutcome::Completed {
+                    output_path,
+                    width,
+                    height,
+                    output_size_bytes,
+                    ..
+                } => {
+                    let data = fs::read(&output_path).expect("output readable");
+                    assert!(is_jpeg_magic(&data), "output has JPEG magic bytes");
+                    assert!(
+                        decoded_dimensions(&output_path) == Some((64, 48)),
+                        "dimensions preserved"
+                    );
+                    assert_eq!((width, height), (64, 48));
+                    assert!(output_size_bytes > 0);
+                }
+                other => panic!("PNG -> JPEG must complete, got {other:?}"),
+            }
+            assert_eq!(
+                fs::read(&png_path).expect("original re-readable"),
+                original,
+                "original PNG untouched"
+            );
+        }
+
+        #[test]
+        fn jpeg_to_png_real_file() {
+            let _guard = fixture_lock();
+            let (_png, jpg_path, _webp, _txt) = generate_fixtures();
+            let original = fs::read(&jpg_path).expect("original readable");
+            let output_dir = tempfile::tempdir().expect("tempdir");
+            let opts = ConvertOpts {
+                output_format: ImageFormat::Png,
+                quality: None,
+                resize: None,
+            };
+            match run_one(&jpg_path, output_dir.path(), &opts) {
+                ImageOutcome::Completed { output_path, .. } => {
+                    let data = fs::read(&output_path).expect("output readable");
+                    assert!(is_png_magic(&data), "output has PNG magic bytes");
+                    assert!(
+                        decoded_dimensions(&output_path) == Some((48, 64)),
+                        "portrait dimensions preserved"
+                    );
+                }
+                other => panic!("JPEG -> PNG must complete, got {other:?}"),
+            }
+            assert_eq!(fs::read(&jpg_path).expect("re-readable"), original);
+        }
+
+        #[test]
+        fn png_to_webp_real_file() {
+            let _guard = fixture_lock();
+            let (png_path, _jpg, _webp, _txt) = generate_fixtures();
+            let original = fs::read(&png_path).expect("original readable");
+            let output_dir = tempfile::tempdir().expect("tempdir");
+            let opts = ConvertOpts {
+                output_format: ImageFormat::WebP,
+                quality: None,
+                resize: None,
+            };
+            match run_one(&png_path, output_dir.path(), &opts) {
+                ImageOutcome::Completed { output_path, .. } => {
+                    let data = fs::read(&output_path).expect("output readable");
+                    assert!(is_webp_magic(&data), "output has RIFF/WEBP magic bytes");
+                    assert!(
+                        decoded_dimensions(&output_path) == Some((64, 48)),
+                        "WebP decodes with correct dimensions"
+                    );
+                }
+                other => panic!("PNG -> WebP must complete, got {other:?}"),
+            }
+            assert_eq!(fs::read(&png_path).expect("re-readable"), original);
+        }
+
+        #[test]
+        fn webp_to_png_real_file() {
+            let _guard = fixture_lock();
+            let (_png, _jpg, webp_path, _txt) = generate_fixtures();
+            let original = fs::read(&webp_path).expect("original readable");
+            let output_dir = tempfile::tempdir().expect("tempdir");
+            let opts = ConvertOpts {
+                output_format: ImageFormat::Png,
+                quality: None,
+                resize: None,
+            };
+            match run_one(&webp_path, output_dir.path(), &opts) {
+                ImageOutcome::Completed { output_path, .. } => {
+                    let data = fs::read(&output_path).expect("output readable");
+                    assert!(is_png_magic(&data), "output has PNG magic bytes");
+                    assert!(decoded_dimensions(&output_path) == Some((64, 48)));
+                }
+                other => panic!("WebP -> PNG must complete, got {other:?}"),
+            }
+            assert_eq!(fs::read(&webp_path).expect("re-readable"), original);
+        }
+
+        #[test]
+        fn batch_with_resize_respects_bounding_box() {
+            let _guard = fixture_lock();
+            let (png_path, jpg_path, _webp, _txt) = generate_fixtures();
+            let output_dir = tempfile::tempdir().expect("tempdir");
+            // Landscape 64×48 and portrait 48×64 into a 32×100 box.
+            let opts = ConvertOpts {
+                output_format: ImageFormat::Png,
+                quality: None,
+                resize: Some(ResizeOpts {
+                    max_width: 32,
+                    max_height: 100,
+                }),
+            };
+            let outcomes = convert_batch(
+                &[png_path, jpg_path],
+                output_dir.path(),
+                &opts,
+                4,
+                Arc::new(AtomicBool::new(false)),
+                Arc::new(ImageHooks::quiet()),
+            );
+            assert_eq!(outcomes.len(), 2, "both batch members processed");
+            for outcome in &outcomes {
+                match outcome {
+                    ImageOutcome::Completed {
+                        output_path,
+                        width,
+                        height,
+                        ..
+                    } => {
+                        assert!(*width <= 32 && *height <= 100, "bounding box respected");
+                        assert!(
+                            decoded_dimensions(output_path) == Some((*width, *height)),
+                            "encoded image matches the outcome dimensions"
+                        );
+                    }
+                    other => panic!("batch member must complete, got {other:?}"),
+                }
+            }
+            // Exact box-fitted sizes: landscape 64×48 → 32×24, portrait
+            // 48×64 → 32×43 — aspect ratio preserved, never stretched.
+            let dims: Vec<(u32, u32)> = outcomes
+                .iter()
+                .filter_map(|outcome| match outcome {
+                    ImageOutcome::Completed { width, height, .. } => Some((*width, *height)),
+                    _ => None,
+                })
+                .collect();
+            assert!(
+                dims.contains(&(32, 24)) && dims.contains(&(32, 43)),
+                "expected exactly the box-fitted sizes: {dims:?}"
+            );
+        }
+
+        #[test]
+        fn batch_duplicate_names_no_clobber() {
+            let _guard = fixture_lock();
+            let (png_path, _jpg, _webp, _txt) = generate_fixtures();
+            let dir = tempfile::tempdir().expect("tempdir");
+            let a = dir.path().join("a");
+            let b = dir.path().join("b");
+            fs::create_dir(&a).expect("dir a");
+            fs::create_dir(&b).expect("dir b");
+            fs::copy(&png_path, a.join("same.png")).expect("copy a");
+            fs::copy(&png_path, b.join("same.png")).expect("copy b");
+
+            let output_dir = tempfile::tempdir().expect("tempdir");
+            let opts = ConvertOpts {
+                output_format: ImageFormat::Png,
+                quality: None,
+                resize: None,
+            };
+            let outcomes = convert_batch(
+                &[a.join("same.png"), b.join("same.png")],
+                output_dir.path(),
+                &opts,
+                4,
+                Arc::new(AtomicBool::new(false)),
+                Arc::new(ImageHooks::quiet()),
+            );
+            let mut names: Vec<String> = outcomes
+                .iter()
+                .filter_map(|outcome| match outcome {
+                    ImageOutcome::Completed { output_path, .. } => output_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .map(String::from),
+                    _ => None,
+                })
+                .collect();
+            names.sort();
+            assert_eq!(
+                names,
+                vec!["same.png".to_string(), "same_1.png".to_string()],
+                "identical stems get _1 suffixes instead of overwriting"
+            );
+        }
+
+        #[test]
+        fn non_image_input_fails_with_clear_not_image_message() {
+            let _guard = fixture_lock();
+            let (_png, _jpg, _webp, txt_path) = generate_fixtures();
+            let output_dir = tempfile::tempdir().expect("tempdir");
+            let opts = ConvertOpts {
+                output_format: ImageFormat::Png,
+                quality: None,
+                resize: None,
+            };
+            let outcome = run_one(&txt_path, output_dir.path(), &opts);
+            match outcome {
+                ImageOutcome::Failed { error, .. } => {
+                    assert!(
+                        error.message.contains("image"),
+                        "message: {}",
+                        error.message
+                    );
+                }
+                other => panic!("text file must fail honestly, got {other:?}"),
+            }
+        }
+
+        #[test]
+        fn cancellation_prevents_output_publication() {
+            let _guard = fixture_lock();
+            let (png_path, _jpg, _webp, _txt) = generate_fixtures();
+            let output_dir = tempfile::tempdir().expect("tempdir");
+            let cancel = Arc::new(AtomicBool::new(true));
+            let opts = ConvertOpts {
+                output_format: ImageFormat::Jpeg,
+                quality: Some(85),
+                resize: None,
+            };
+            let outcomes = convert_batch(
+                &[png_path],
+                output_dir.path(),
+                &opts,
+                4,
+                cancel,
+                Arc::new(ImageHooks::quiet()),
+            );
+            assert!(
+                matches!(&outcomes[0], ImageOutcome::Canceled { .. }),
+                "flagged job cancels: {:?}",
+                outcomes[0]
+            );
+            assert!(
+                output_dir
+                    .as_ref()
+                    .read_dir()
+                    .map(|mut d| d.next().is_none())
+                    .unwrap_or(false),
+                "no output file is published for a canceled file"
+            );
+        }
     }
 }

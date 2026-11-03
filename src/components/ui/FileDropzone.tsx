@@ -7,6 +7,9 @@ interface FileDropzoneProps {
   /** Hint shown under the title, e.g. accepted formats: "JPG · PNG · WebP". */
   formatHint?: string;
   multiple?: boolean;
+  /** Compact presentation when additional files are appended to an
+   * existing queue — same behaviour, smaller footprint. */
+  compact?: boolean;
   /** Receives absolute filesystem paths (hashing happens in Rust). */
   onFiles: (paths: string[]) => void;
   /** Click-to-browse adapter; injectable for tests (default: native dialog). */
@@ -23,6 +26,7 @@ export function FileDropzone({
   label,
   formatHint,
   multiple = false,
+  compact = false,
   onFiles,
   onBrowse,
 }: FileDropzoneProps) {
@@ -91,7 +95,7 @@ export function FileDropzone({
 
   return (
     <div
-      className="workspace-dropzone"
+      className={`workspace-dropzone${compact ? " workspace-dropzone--compact" : ""}`}
       data-over={isOver}
       role="button"
       tabIndex={0}
