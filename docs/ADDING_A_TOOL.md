@@ -12,7 +12,7 @@ This walkthrough is the real procedure used to register the first tool
 
 1. **Create the tool folder** — `src/features/tools/<id>/`, where `<id>` is
    the stable kebab-case identifier (it doubles as the URL slug
-   `#/tools/<id>`). A tool folder contains:
+   `/tools/<id>`). A tool folder contains:
 
    - the page component (default export, e.g. `About.tsx`);
    - `manifest.ts` exporting `const tool: ToolDefinition` (from
@@ -32,7 +32,7 @@ This walkthrough is the real procedure used to register the first tool
      category: "files",            // must exist in the registry's label map
      icon: Wrench,
      keywords: ["short", "search", "words"],
-     routePath: "#/tools/my-tool", // always `#/tools/${id}`
+     routePath: "/tools/my-tool", // always `/tools/${id}`
      load: async () => ({ default: MyPage }),
    };
    ```
@@ -52,7 +52,7 @@ This walkthrough is the real procedure used to register the first tool
 
 - **Sidebar** entry under the Tools section, with active highlighting.
 - **Home** list row (icon, name, description).
-- **Route** at `#/tools/<id>` with deep linking and back/forward support.
+- **Route** at `/tools/<id>` with deep linking and back/forward support.
 - **Command palette** match on name, keywords, category, description.
 - **Unknown slugs** still fall through to the graceful Not Found page — no
   extra per-tool handling.

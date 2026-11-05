@@ -1,402 +1,266 @@
-import { useCallback, useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, Minus, Plus, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../../../components/ui/Button";
-import { Select } from "../../../components/ui/Select";
-import { IconButton } from "../../../components/ui/IconButton";
 import { ToolWorkspace } from "../../../components/ui/ToolWorkspace";
 import { useToast } from "../../../components/feedback/Toast";
-import { createQueueStore } from "../../../shared/queue/store";
-import {
-  pickRenameFiles,
-  tauriInvokeAdapter,
-  tauriListenAdapter,
-} from "../../../shared/fs/invoke";
+import { pickRenameFiles, tauriInvokeAdapter } from "../../../shared/fs/invoke";
 import { parseToolError } from "../../../shared/fs/errors";
 import { OperationBuilder } from "./OperationBuilder";
-import { RenamePreview } from "./RenamePreview";
-import { type RenameProposal } from "../../../src-tauri/src/processing/renaming";
-import { type RenameOperationDraft } from "./operations";
+import { RenamePreview, type RenameProposalRow } from "./RenamePreview";
+import { toWireOperations, type RenameOperationDraft } from "./operations";
 
 const PLAN_COMMAND = "plan_rename";
 const APPLY_COMMAND = "apply_rename";
 const UNDO_COMMAND = "undo_rename";
-const SAVE_COMMAND = "save_converted";
-const SAVE_ALL_COMMAND = "save_all_converted";
-const IMAGE_PROGRESS_EVENT = "omnitools://image-progress";
-const IMAGE_SAVE_EVENT = "omnitools://image-save";
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+/** Wire shapes of the Rust outcome enums (camelCase tagged). */
+export type RenameOutcome =
+  | { kind: "renamed"; from: string; to: string }
+  | { kind: "failed"; path: string; error: { code: string; message: string } }
+  | { kind: "skipped"; path: string };
+
+export type RenameUndoOutcome =
+  | { kind: "restored"; from: string; to: string }
+  | { kind: "failed"; from: string; error: { code: string; message: string } };
+
+/** Rust planner + IPC round trip is ~instant locally; 250 ms coalesces typing. */
+const PREVIEW_DEBOUNCE_MS = 250;
+
+function formatValidationSummary(
+  renamedCount: number,
+  failedCount: number,
+  skippedCount: number,
+): string {
+  const parts: string[] = [];
+  if (renamedCount > 0) parts.push(`Renamed ${renamedCount}`);
+  if (failedCount > 0) parts.push(`${failedCount} failed`);
+  if (skippedCount > 0) parts.push(`${skippedCount} skipped`);
+  return parts.length > 0 ? parts.join(" · ") : "Nothing to rename";
 }
 
 export default function BatchRenamePage() {
   const toast = useToast();
   const [paths, setPaths] = useState<string[]>([]);
   const [operations, setOperations] = useState<RenameOperationDraft[]>([]);
+  /** Per-row skip control, keyed by absolute path (the Rust skip argument). */
   const [skipPaths, setSkipPaths] = useState<Set<string>>(new Set());
-  const [preview, setPreview] = useState<RenameProposal[]>([]);
-  const [previewState, setPreviewState] = useState<
+  const [proposals, setProposals] = useState<RenameProposalRow[]>([]);
+  const [previewPhase, setPreviewPhase] = useState<
     "idle" | "loading" | "ready" | "error"
   >("idle");
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [saveStates, setSaveStates] = useState<
-    Map<string, "ready" | "saving" | "saved" | "saveError">
-  >(new Map());
   const [applying, setApplying] = useState(false);
   const [undoing, setUndoing] = useState(false);
+  /** True only after a successful apply that actually renamed files — mirrors
+   * the session-only undo journal in Rust (no query command exists, so this
+   * optimistic flag is the honest proxy). */
+  const [canUndo, setCanUndo] = useState(false);
 
-  const store = createQueueStore({
-    invoke: tauriInvokeAdapter,
-    listen: tauriListenAdapter,
-    makeJobId: () => crypto.randomUUID(),
-    command: PLAN_COMMAND,
-    cancelCommand: UNDO_COMMAND,
-    progressEvent: IMAGE_PROGRESS_EVENT,
-  });
-
-  const [snapshot, setSnapshot] = useState(() => store.getState());
-
-  useEffect(() => {
-    return store.subscribe(() => setSnapshot(store.getState()));
-  }, [store]);
-
-  const rows = snapshot.rows;
-
-  const requestRef = useRef(0);
+  // Sequential request token: stale plan responses never overwrite newer ones.
+  const planRequestRef = useRef(0);
 
   useEffect(() => {
     if (paths.length === 0) {
-      setPreview([]);
-      setPreviewState("idle");
+      planRequestRef.current += 1;
+      setProposals([]);
+      setPreviewPhase("idle");
       setPreviewError(null);
       return;
     }
 
-    const requestId = ++requestRef.current;
-    setPreviewState("loading");
+    const requestId = ++planRequestRef.current;
+    setPreviewPhase("loading");
     setPreviewError(null);
 
     const timer = setTimeout(async () => {
       try {
-        const wireOps = operations.map((d) => d.op);
         const result = (await tauriInvokeAdapter(PLAN_COMMAND, {
           paths,
-          operations: wireOps,
-        })) as RenameProposal[];
-
-        if (requestId !== requestRef.current) return;
-
-        setPreview(result);
-        setPreviewState("ready");
+          operations: toWireOperations(operations),
+        })) as RenameProposalRow[];
+        if (requestId !== planRequestRef.current) return; // stale response
+        setProposals(result);
+        setPreviewPhase("ready");
       } catch (error) {
-        if (requestId !== requestRef.current) return;
-        const toolError = parseToolError(error);
-        setPreviewError(toolError.message || "Preview failed");
-        setPreviewState("error");
+        if (requestId !== planRequestRef.current) return; // stale failure
+        setPreviewError(parseToolError(error).message || "Preview failed");
+        setPreviewPhase("error");
       }
-    }, 250);
+    }, PREVIEW_DEBOUNCE_MS);
 
     return () => {
       clearTimeout(timer);
     };
   }, [paths, operations]);
 
-  const handleFiles = useCallback(
-    (newPaths: string[]) => {
-      const existing = new Set(paths);
-      const newPathsUnique = newPaths.filter((p) => !existing.has(p));
-      setPaths((prev) => [...prev, ...newPathsUnique]);
-    },
-    [paths],
-  );
+  const addFiles = useCallback((newPaths: string[]) => {
+    setPaths((prev) => {
+      const existing = new Set(prev);
+      const additions = newPaths.filter((path) => !existing.has(path));
+      return additions.length > 0 ? [...prev, ...additions] : prev;
+    });
+  }, []);
 
-  const handleRemovePath = useCallback(
-    (path: string) => {
-      setPaths((prev) => prev.filter((p) => p !== path));
-      setSkipPaths((prev) => {
-        const next = new Set(prev);
+  const toggleSkip = useCallback((path: string) => {
+    setSkipPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
         next.delete(path);
-        return next;
-      });
-    },
-    [],
-  );
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
 
-  const handleConvert = useCallback(async () => {
-    if (!paths.length || applying) return;
+  const clearList = useCallback(() => {
+    setPaths([]);
+    setSkipPaths(new Set());
+  }, []);
 
-    const wireOps = operations.map((d) => d.op);
+  const handleApply = useCallback(async () => {
+    if (paths.length === 0 || applying) return;
     setApplying(true);
-
     try {
-      const result = (await tauriInvokeAdapter(APPLY_COMMAND, {
+      const outcomes = (await tauriInvokeAdapter(APPLY_COMMAND, {
         paths,
-        operations: wireOps,
-        skip_paths: Array.from(skipPaths),
-      })) as RenameProposal[];
+        operations: toWireOperations(operations),
+        skip_paths: [...skipPaths],
+      })) as RenameOutcome[];
 
-      const newPaths = [...paths];
+      // Outcomes are 1:1 with `paths`, in input order. Adopt the paths Rust
+      // actually produced so the UI tracks the real filesystem state.
+      const nextPaths = [...paths];
       let renamedCount = 0;
       let failedCount = 0;
       let skippedCount = 0;
+      let anyRenamed = false;
 
-      for (const outcome of result) {
+      outcomes.forEach((outcome, index) => {
         if (outcome.kind === "renamed") {
-          const idx = newPaths.indexOf(outcome.from);
-          if (idx !== -1) newPaths[idx] = outcome.to;
-          renamedCount++;
+          nextPaths[index] = outcome.to;
+          renamedCount += 1;
+          anyRenamed = true;
         } else if (outcome.kind === "failed") {
-          failedCount++;
-        } else if (outcome.kind === "skipped") {
-          skippedCount++;
+          failedCount += 1;
+        } else {
+          skippedCount += 1;
         }
-      }
-
-      setPaths(newPaths);
-      setSkipPaths((prev) => {
-        const next = new Set(prev);
-        for (const outcome of result) {
-          if (outcome.kind !== "skipped") {
-            next.delete(outcome.path);
-          }
-        }
-        return next;
       });
 
-      const summaryParts: string[] = [];
-      if (renamedCount > 0) summaryParts.push(`Renamed ${renamedCount}`);
-      if (failedCount > 0) summaryParts.push(`${failedCount} failed`);
-      if (skippedCount > 0) summaryParts.push(`${skippedCount} skipped`);
+      setPaths(nextPaths);
+      // Skips only remain meaningful for rows that kept their names.
+      const stillSkipped = new Set<string>();
+      outcomes.forEach((outcome, index) => {
+        const original = paths[index];
+        if (
+          outcome.kind === "skipped" &&
+          original !== undefined &&
+          skipPaths.has(original)
+        ) {
+          stillSkipped.add(original);
+        }
+      });
+      setSkipPaths(stillSkipped);
+      setCanUndo(anyRenamed);
 
-      toast(summaryParts.join(" · "));
+      toast(formatValidationSummary(renamedCount, failedCount, skippedCount), failedCount > 0 ? "error" : "success");
     } catch (error) {
-      const toolError = parseToolError(error);
-      toast(`Rename failed: ${toolError.message || "unknown error"}`);
+      toast(`Rename failed: ${parseToolError(error).message || "unknown error"}`, "error");
     } finally {
       setApplying(false);
     }
-  }, [paths, operations, skipPaths]);
+  }, [paths, operations, skipPaths, applying, toast]);
 
   const handleUndo = useCallback(async () => {
+    if (undoing) return;
     setUndoing(true);
     try {
-      const result = (await tauriInvokeAdapter(UNDO_COMMAND, {})) as {
-        kind: "restored" | "failed";
-        from: string;
-        to?: string;
-        error?: { code: string; message: string };
-      }[];
+      const outcomes = (await tauriInvokeAdapter(UNDO_COMMAND, {})) as RenameUndoOutcome[];
 
-      const restoredPaths: string[] = [];
-      const failedPaths: string[] = [];
-
-      for (const outcome of result) {
-        if (outcome.kind === "restored") {
-          restoredPaths.push(outcome.from);
-        } else if (outcome.kind === "failed") {
-          failedPaths.push(outcome.from);
-        }
+      // `Restored { from, to }`: the file was at `to` (our current path for it)
+      // and now lives at `from` again — swap the frontend entry accordingly.
+      const restoredTo = new Map(outcomes
+        .filter((outcome) => outcome.kind === "restored")
+        .map((outcome) => [outcome.to, outcome.from]));
+      if (restoredTo.size > 0) {
+        setPaths((prev) => prev.map((path) => restoredTo.get(path) ?? path));
       }
 
-      setPaths((prev) =>
-        prev.map((p) => {
-          const restored = restoredPaths.find((r) => r === p);
-          return restored ? p : p;
-        }),
-      );
+      const restoredCount = restoredTo.size;
+      const failedCount = outcomes.filter((o) => o.kind === "failed").length;
+      // Retryable failures stay in the session journal — keep Undo enabled
+      // for them; a fully drained journal disables it honestly.
+      setCanUndo(failedCount > 0);
 
-      const restoredCount = restoredPaths.length;
-      const failedCount = failedPaths.length;
-
-      const summaryParts: string[] = [];
-      if (restoredCount > 0) summaryParts.push(`Restored ${restoredCount}`);
-      if (failedCount > 0) summaryParts.push(`${failedCount} failed`);
-
-      toast(summaryParts.join(" · "));
+      const parts: string[] = [];
+      if (restoredCount > 0) parts.push(`Restored ${restoredCount}`);
+      if (failedCount > 0) parts.push(`${failedCount} failed`);
+      toast(parts.length > 0 ? parts.join(" · ") : "Nothing to undo", failedCount > 0 ? "error" : "success");
     } catch (error) {
-      const toolError = parseToolError(error);
-      toast(`Undo failed: ${toolError.message || "unknown error"}`);
+      toast(`Undo failed: ${parseToolError(error).message || "unknown error"}`, "error");
     } finally {
       setUndoing(false);
     }
-  }, []);
+  }, [undoing, toast]);
 
-  const handleSaveFile = async (staged_file_id: string) => {
-    setSaveStates((current) => {
-      const next = new Map(current);
-      next.set(staged_file_id, "saving");
-      return next;
-    });
-    const destination = await pickSaveDestination();
-    if (destination === null) {
-      setSaveStates((current) => {
-        const next = new Map(current);
-        next.set(staged_file_id, "ready");
-        return next;
-      });
-      return;
-    }
-    try {
-      await tauriInvokeAdapter(SAVE_COMMAND, {
-        staged_file_id,
-        destination,
-      });
-    } catch (error) {
-      const toolError = parseToolError(error);
-      toast(`Save failed: ${toolError.message || "unknown error"}`);
-      setSaveStates((current) => {
-        const next = new Map(current);
-        next.set(staged_file_id, "saveError");
-        return next;
-      });
-    }
-  };
-
-  const handleSaveAll = async () => {
-    const destDir = await pickDirectory();
-    if (destDir === null) return;
-    const savable = rows.filter(
-      (row) =>
-        row.status === "done" &&
-        row.staged_file_id &&
-        saveStates.get(row.staged_file_id) === "ready",
-    );
-    if (savable.length === 0) return;
-    const ids = savable.map((row) => row.staged_file_id!);
-    ids.forEach((id) => {
-      setSaveStates((current) => {
-        const next = new Map(current);
-        next.set(id, "saving");
-        return next;
-      });
-    });
-    try {
-      await tauriInvokeAdapter(SAVE_ALL_COMMAND, {
-        dest_dir: destDir,
-        staged_file_ids: ids,
-      });
-    } catch (error) {
-      const toolError = parseToolError(error);
-      toast(`Save all failed: ${toolError.message || "unknown error"}`);
-      ids.forEach((id) => {
-        setSaveStates((current) => {
-          const next = new Map(current);
-          if (next.get(id) === "saving") {
-            next.set(id, "saveError");
-          }
-          return next;
-        });
-      });
-    }
-  };
-
-  const idleCount = rows.filter((row) => row.status === "idle").length;
-  const savableCount = rows.filter(
-    (row) =>
-      row.status === "done" &&
-      row.staged_file_id &&
-      saveStates.get(row.staged_file_id) === "ready",
-  ).length;
-  const canConvert = paths.length > 0 && !applying;
-
-  const convertLabel = applying
+  const canApply = paths.length > 0 && !applying;
+  const actionLabel = applying
     ? "Renaming…"
     : `Rename ${paths.length} file${paths.length !== 1 ? "s" : ""}`;
 
   const optionsPanel = (
-    <>
-      <div className="workspace-section">
-        <h3 className="workspace-section-title">Operations</h3>
-        <OperationBuilder operations={operations} onChange={setOperations} />
-      </div>
-    </>
+    <section className="rename-operations" aria-label="Rename operations">
+      <h2 className="section-title">Operations</h2>
+      <OperationBuilder operations={operations} onChange={setOperations} />
+    </section>
   );
 
   const secondaryActions = (
     <>
-      {applying && (
-        <button
-          className="action-button action-button--secondary"
-          onClick={handleUndo}
-        >
-          <X size={16} strokeWidth={1.75} aria-hidden="true" />
-          Cancel
-        </button>
-      )}
-      {!applying && paths.length > 0 && (
-        <button
-          className="action-button action-button--secondary"
-          onClick={() => setPaths([])}
-        >
-          <RefreshCw size={16} strokeWidth={1.75} aria-hidden="true" />
+      {paths.length > 0 && (
+        <Button size="sm" onClick={clearList} disabled={applying}>
           Clear list
-        </button>
-      )}
-      {savableCount > 0 && !applying && (
-        <Button size="sm" onClick={handleSaveAll} disabled={savableCount === 0}>
-          Save all ({savableCount})
         </Button>
       )}
-      {idleCount > 0 && (
-        <span className="idle-count">
-          {idleCount} file{idleCount !== 1 ? "s" : ""} ready
-        </span>
-      )}
+      <Button
+        size="sm"
+        onClick={() => void handleUndo()}
+        disabled={!canUndo || undoing || applying}
+      >
+        {undoing ? "Undoing…" : "Undo"}
+      </Button>
+      <span className="workspace-note">
+        Undo applies to the most recent rename this session. It is kept in
+        memory only and is lost when OmniTools closes.
+      </span>
     </>
   );
 
   return (
     <ToolWorkspace
-      title="Batch Rename"
-      description="Rename multiple files at once with find/replace, numbering, case change, and more"
       dropLabel="Add files"
       formatHint="Any file type"
       multiple
-      onFiles={handleFiles}
-      queue={rows.map((row) => ({
-        id: row.id,
-        path: row.path,
-        name: row.name,
-        status: row.status,
-        size: row.sizeBytes ? formatBytes(row.sizeBytes) : undefined,
-        staged_file_id: row.staged_file_id,
-        outputPath: row.outputPath,
-        message: row.message,
-        save_state: row.staged_file_id ? saveStates.get(row.staged_file_id) : undefined,
-      }))}
-      onRemove={handleRemovePath}
+      onFiles={addFiles}
+      onBrowse={pickRenameFiles}
+      queue={[]}
       options={optionsPanel}
-      actionLabel={convertLabel}
-      onAction={handleConvert}
-      actionDisabled={!canConvert}
+      actionLabel={actionLabel}
+      onAction={() => void handleApply()}
+      actionDisabled={!canApply}
       secondaryActions={secondaryActions}
-    >
-      {previewState === "loading" && (
-        <div className="preview-panel">
-          <div className="preview-empty">
-            <span className="preview-empty-label">Computing preview…</span>
-          </div>
-        </div>
-      )}
-      {previewState === "ready" && preview.length > 0 && (
+      preview={
         <RenamePreview
-          items={preview}
+          items={proposals}
+          paths={paths}
           skipPaths={skipPaths}
-          onSkipToggle={handleRemovePath}
-          disabled={applying}
+          onSkipToggle={toggleSkip}
+          disabled={applying || undoing}
+          loading={previewPhase === "loading"}
+          error={previewPhase === "error" ? previewError : null}
         />
-      )}
-      {previewState === "error" && (
-        <div className="preview-panel">
-          <div className="preview-empty">
-            <span className="preview-empty-label">
-              Preview error: {previewError}
-            </span>
-          </div>
-        </div>
-      )}
-    </ToolWorkspace>
+      }
+      previewAriaLabel="Batch rename preview"
+    />
   );
 }

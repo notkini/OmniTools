@@ -1,67 +1,55 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   makeOperation,
   makeOperationId,
+  makeOperationValue,
   moveOperation,
+  operationHint,
+  operationLabel,
   toWireOperations,
   validateNumbering,
   type OperationDraft,
-  type OperationType,
 } from "./operations";
 
+describe("makeOperationValue", () => {
+  it("creates the wire default per type", () => {
+    expect(makeOperationValue("prefix")).toEqual({ type: "prefix", value: "" });
+    expect(makeOperationValue("suffix")).toEqual({ type: "suffix", value: "" });
+    expect(makeOperationValue("replace")).toEqual({
+      type: "replace",
+      find: "",
+      replaceWith: "",
+      caseSensitive: false,
+    });
+    expect(makeOperationValue("numbering")).toEqual({
+      type: "numbering",
+      start: 1,
+      step: 1,
+      padding: 1,
+    });
+    expect(makeOperationValue("case")).toEqual({ type: "case", mode: "upper" });
+    expect(makeOperationValue("extension")).toEqual({
+      type: "extension",
+      value: "",
+    });
+    expect(makeOperationValue("pattern")).toEqual({
+      type: "pattern",
+      template: "",
+    });
+  });
+});
+
 describe("makeOperation", () => {
-  it("creates prefix operation", () => {
+  it("wraps the wire default with a fresh id", () => {
     const op = makeOperation("prefix");
     expect(op.op.type).toBe("prefix");
-    expect(op.op.value).toBe("");
+    expect(op).toEqual({ id: op.id, op: makeOperationValue("prefix") });
     expect(typeof op.id).toBe("string");
     expect(op.id.length).toBeGreaterThan(0);
   });
 
-  it("creates suffix operation", () => {
-    const op = makeOperation("suffix");
-    expect(op.op.type).toBe("suffix");
-    expect(op.op.value).toBe("");
-  });
-
-  it("creates replace operation", () => {
-    const op = makeOperation("replace");
-    expect(op.op.type).toBe("replace");
-    expect(op.op.find).toBe("");
-    expect(op.op.replaceWith).toBe("");
-    expect(op.op.caseSensitive).toBe(false);
-  });
-
-  it("creates numbering operation", () => {
-    const op = makeOperation("numbering");
-    expect(op.op.type).toBe("numbering");
-    expect(op.op.start).toBe(1);
-    expect(op.op.step).toBe(1);
-    expect(op.op.padding).toBe(1);
-  });
-
-  it("creates case operation", () => {
-    const op = makeOperation("case");
-    expect(op.op.type).toBe("case");
-    expect(op.op.mode).toBe("upper");
-  });
-
-  it("creates extension operation", () => {
-    const op = makeOperation("extension");
-    expect(op.op.type).toBe("extension");
-    expect(op.op.value).toBe("");
-  });
-
-  it("creates pattern operation", () => {
-    const op = makeOperation("pattern");
-    expect(op.op.type).toBe("pattern");
-    expect(op.op.template).toBe("");
-  });
-
   it("generates unique ids", () => {
-    const a = makeOperationId();
-    const b = makeOperationId();
-    expect(a).not.toBe(b);
+    expect(makeOperationId()).not.toBe(makeOperationId());
   });
 });
 
@@ -79,7 +67,7 @@ describe("operationLabel", () => {
 
 describe("operationHint", () => {
   it("returns hints", () => {
-    expect(operationHint("prefix")).toContain("Prefix");
+    expect(operationHint("prefix")).toContain("before");
     expect(operationHint("replace")).toContain("replace");
     expect(operationHint("pattern")).toContain("{n}");
   });
@@ -87,19 +75,21 @@ describe("operationHint", () => {
 
 describe("moveOperation", () => {
   it("moves item up", () => {
-    const list = ["a", "b", "c"];
-    expect(moveOperation(list, 1, 0)).toEqual(["b", "a", "c"]);
+    expect(moveOperation(["a", "b", "c"], 1, 0)).toEqual(["b", "a", "c"]);
   });
 
   it("moves item down", () => {
-    const list = ["a", "b", "c"];
-    expect(moveOperation(list, 0, 1)).toEqual(["b", "a", "c"]);
+    expect(moveOperation(["a", "b", "c"], 0, 1)).toEqual(["b", "a", "c"]);
+  });
+
+  it("keeps order for identical indices", () => {
+    expect(moveOperation(["a", "b"], 1, 1)).toEqual(["a", "b"]);
   });
 
   it("does nothing for out-of-range indices", () => {
-    const list = ["a", "b"];
-    expect(moveOperation(list, 0, 5)).toEqual(["a", "b"]);
-    expect(moveOperation(list, 5, 0)).toEqual(["a", "b"]);
+    expect(moveOperation(["a", "b"], 0, 5)).toEqual(["a", "b"]);
+    expect(moveOperation(["a", "b"], 5, 0)).toEqual(["a", "b"]);
+    expect(moveOperation(["a", "b"], -1, 0)).toEqual(["a", "b"]);
   });
 });
 
@@ -137,8 +127,7 @@ describe("toWireOperations", () => {
       { id: "a", op: { type: "prefix", value: "pre_" } },
       { id: "b", op: { type: "suffix", value: "_post" } },
     ];
-    const wire = toWireOperations(drafts);
-    expect(wire).toEqual([
+    expect(toWireOperations(drafts)).toEqual([
       { type: "prefix", value: "pre_" },
       { type: "suffix", value: "_post" },
     ]);

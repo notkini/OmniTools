@@ -77,7 +77,11 @@ export function ToolWorkspace({
   return (
     <div className="tool-workspace">
       {hasQueue ? <FileQueue items={queue} onCopyHex={onCopyHex} onCopyPath={onCopyPath} onSave={onSave} onRemove={onRemove} /> : null}
-      {preview}
+      {preview ? (
+        <section className="workspace-preview-region" aria-label={previewAriaLabel}>
+          {preview}
+        </section>
+      ) : null}
       <FileDropzone
         label={hasQueue ? "Add more files" : dropLabel}
         formatHint={formatHint}

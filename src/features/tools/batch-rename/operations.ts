@@ -38,29 +38,29 @@ export function makeOperationId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-export function makeOperation(type: OperationType): RenameOperationDraft {
+/** Wire-shaped default fields for one operation type. Shared by the builder
+ * (when the user switches a card's type) and by `makeOperation`. */
+export function makeOperationValue(type: OperationType): RenameOperationDraft["op"] {
   switch (type) {
     case "prefix":
-      return { id: makeOperationId(), op: { type: "prefix", value: "" } };
+      return { type: "prefix", value: "" };
     case "suffix":
-      return { id: makeOperationId(), op: { type: "suffix", value: "" } };
+      return { type: "suffix", value: "" };
     case "replace":
-      return {
-        id: makeOperationId(),
-        op: { type: "replace", find: "", replaceWith: "", caseSensitive: false },
-      };
+      return { type: "replace", find: "", replaceWith: "", caseSensitive: false };
     case "numbering":
-      return {
-        id: makeOperationId(),
-        op: { type: "numbering", start: 1, step: 1, padding: 1 },
-      };
+      return { type: "numbering", start: 1, step: 1, padding: 1 };
     case "case":
-      return { id: makeOperationId(), op: { type: "case", mode: "upper" } };
+      return { type: "case", mode: "upper" };
     case "extension":
-      return { id: makeOperationId(), op: { type: "extension", value: "" } };
+      return { type: "extension", value: "" };
     case "pattern":
-      return { id: makeOperationId(), op: { type: "pattern", template: "" } };
+      return { type: "pattern", template: "" };
   }
+}
+
+export function makeOperation(type: OperationType): RenameOperationDraft {
+  return { id: makeOperationId(), op: makeOperationValue(type) };
 }
 
 export function operationLabel(type: OperationType): string {
@@ -102,8 +102,20 @@ export function operationHint(type: OperationType): string {
 }
 
 export function moveOperation<T>(list: T[], from: number, to: number): T[] {
+  if (
+    from < 0 ||
+    from >= list.length ||
+    to < 0 ||
+    to >= list.length ||
+    from === to
+  ) {
+    return [...list];
+  }
   const result = [...list];
   const [removed] = result.splice(from, 1);
+  if (removed === undefined) {
+    return [...list];
+  }
   result.splice(to, 0, removed);
   return result;
 }

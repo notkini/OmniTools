@@ -1,18 +1,22 @@
-import { useCallback, useState } from "react";
-import { ChevronDown, ChevronUp, Minus, Plus, X } from "lucide-react";
+import { useCallback, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, Minus, Plus } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
-import { Select } from "../../../components/ui/Select";
+import { Select, TextInput } from "../../../components/ui/Select";
 import { IconButton } from "../../../components/ui/IconButton";
 import {
   makeOperation,
-  makeOperationId,
+  makeOperationValue,
   moveOperation,
   operationLabel,
   validateNumbering,
+  type CaseMode,
+  type OperationType,
   type RenameOperationDraft,
 } from "./operations";
 
-const TYPE_OPTIONS: { value: string; label: string }[] = [
+type OperationValue = RenameOperationDraft["op"];
+
+const TYPE_OPTIONS: readonly { value: OperationType; label: string }[] = [
   { value: "prefix", label: operationLabel("prefix") },
   { value: "suffix", label: operationLabel("suffix") },
   { value: "replace", label: operationLabel("replace") },
@@ -22,7 +26,7 @@ const TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "pattern", label: operationLabel("pattern") },
 ];
 
-const CASE_MODES = [
+const CASE_MODE_OPTIONS: readonly { value: CaseMode; label: string }[] = [
   { value: "upper", label: "UPPERCASE" },
   { value: "lower", label: "lowercase" },
   { value: "title", label: "Title Case" },
@@ -33,129 +37,117 @@ interface OperationBuilderProps {
   onChange: (operations: RenameOperationDraft[]) => void;
 }
 
-export function OperationBuilder({
-  operations,
-  onChange,
-}: OperationBuilderProps) {
-  const [editingId, setEditingId] = useState<string | null>(null);
-
+/**
+ * The stacked operation editor for Batch Rename. It only builds and edits
+ * serializable drafts — all actual renaming decisions happen in Rust
+ * (`plan_rename`), so nothing here may compute resulting file names.
+ */
+export function OperationBuilder({ operations, onChange }: OperationBuilderProps) {
   const addOperation = useCallback(() => {
-    setEditingId(makeOperationId());
-    onChange((prev) => [...prev, makeOperation("prefix")]);
-  }, [onChange]);
+    onChange([...operations, makeOperation("prefix")]);
+  }, [operations, onChange]);
 
   const removeOperation = useCallback(
     (id: string) => {
-      onChange((prev) => prev.filter((op) => op.id !== id));
-      if (editingId === id) setEditingId(null);
-    },
-    [editingId, onChange],
-  );
-
-  const moveOperationUp = useCallback(
-    (id: string) => {
-      const idx = operations.findIndex((op) => op.id === id);
-      if (idx <= 0) return;
-      onChange((prev: any) => moveOperation(prev, idx, idx - 1));
+      onChange(operations.filter((draft) => draft.id !== id));
     },
     [operations, onChange],
   );
 
-  const moveOperationDown = useCallback(
+  const moveUp = useCallback(
     (id: string) => {
-      const idx = operations.findIndex((op) => op.id === id);
-      if (idx < 0 || idx >= operations.length - 1) return;
-      onChange((prev: any) => moveOperation(prev, idx, idx + 1));
+      const index = operations.findIndex((draft) => draft.id === id);
+      if (index <= 0) return;
+      onChange(moveOperation(operations, index, index - 1));
     },
     [operations, onChange],
   );
 
-  const updateOperation = useCallback(
-    (id: string, op: any) => {
-      onChange((prev: any) =>
-        prev.map((o: any) => (o.id === id ? { ...o, op } : o)),
+  const moveDown = useCallback(
+    (id: string) => {
+      const index = operations.findIndex((draft) => draft.id === id);
+      if (index < 0 || index >= operations.length - 1) return;
+      onChange(moveOperation(operations, index, index + 1));
+    },
+    [operations, onChange],
+  );
+
+  const updateValue = useCallback(
+    (id: string, value: OperationValue) => {
+      onChange(
+        operations.map((draft) =>
+          draft.id === id ? { ...draft, op: value } : draft,
+        ),
       );
     },
-    [onChange],
+    [operations, onChange],
   );
 
-  if (operations.length === 0) {
-    return (
-      <div className="operation-stack">
-        <div className="operation-stack-empty">
-          <span className="operation-stack-empty-label">
-            No operations yet — names stay unchanged
-          </span>
-          <Button
-            size="sm"
-            onClick={addOperation}
-            icon={<Plus size={16} strokeWidth={1.75} aria-hidden="true" />}
+  const operationNodes: ReactNode[] = operations.map((draft, index) => (
+    <div
+      key={draft.id}
+      className="operation-card"
+      data-testid={`operation-card-${index + 1}`}
+    >
+      <div className="operation-card-header">
+        <span className="operation-badge" aria-hidden="true">
+          {index + 1}
+        </span>
+        <Select
+          label="Operation type"
+          value={draft.op.type}
+          options={TYPE_OPTIONS}
+          onChange={(type) => updateValue(draft.id, makeOperationValue(type))}
+        />
+        <div className="operation-card-actions">
+          <IconButton
+            className="row-copy-button"
+            label={`Move ${operationLabel(draft.op.type)} up`}
+            disabled={index === 0}
+            onClick={() => moveUp(draft.id)}
           >
-            Add operation
-          </Button>
+            <ArrowUp size={14} strokeWidth={1.75} aria-hidden="true" />
+          </IconButton>
+          <IconButton
+            className="row-copy-button"
+            label={`Move ${operationLabel(draft.op.type)} down`}
+            disabled={index === operations.length - 1}
+            onClick={() => moveDown(draft.id)}
+          >
+            <ArrowDown size={14} strokeWidth={1.75} aria-hidden="true" />
+          </IconButton>
+          <IconButton
+            className="row-copy-button"
+            label={`Remove ${operationLabel(draft.op.type)}`}
+            onClick={() => removeOperation(draft.id)}
+          >
+            <Minus size={14} strokeWidth={1.75} aria-hidden="true" />
+          </IconButton>
         </div>
       </div>
-    );
-  }
+      <div className="operation-card-fields">
+        <OperationFields
+          value={draft.op}
+          onChange={(next) => updateValue(draft.id, next)}
+        />
+      </div>
+    </div>
+  ));
 
   return (
     <div className="operation-stack">
-      {operations.map((op, index) => {
-        const isEditing = editingId === op.id;
-        return (
-          <div
-            key={op.id}
-            className="operation-card"
-            data-testid={`operation-card-${op.id}`}
-          >
-            <div className="operation-card-header">
-              <span className="operation-badge">{index + 1}</span>
-              <Select
-                label="Operation type"
-                value={op.op.type}
-                options={TYPE_OPTIONS}
-                onChange={(value) => {
-                  updateOperation(id, {
-                    type: value as RenameOperationDraft["op"]["type"],
-                    ...defaultValueForType(
-                      value as RenameOperationDraft["op"]["type"],
-                    ),
-                  });
-                }}
-                size="sm"
-              />
-              <div className="operation-card-actions">
-                <IconButton
-                  label={`Move ${operationLabel(op.op.type)} up`}
-                  icon={<ChevronUp size={14} strokeWidth={1.75} aria-hidden="true" />}
-                  onClick={() => void moveOperationUp(op.id)}
-                  disabled={index === 0}
-                />
-                <IconButton
-                  label={`Move ${operationLabel(op.op.type)} down`}
-                  icon={<ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" />}
-                  onClick={() => void moveOperationDown(op.id)}
-                  disabled={index === operations.length - 1}
-                />
-                <IconButton
-                  label={`Remove ${operationLabel(op.op.type)}`}
-                  icon={<Minus size={14} strokeWidth={1.75} aria-hidden="true" />}
-                  onClick={() => void removeOperation(op.id)}
-                />
-              </div>
-            </div>
-            <div className="operation-card-fields">
-              {renderOperationFields(op, isEditing, updateOperation)}
-            </div>
-          </div>
-        );
-      })}
+      {operations.length === 0 ? (
+        <div className="operation-stack-empty">
+          <span className="operation-stack-empty-label">
+            No operations — file names stay unchanged
+          </span>
+        </div>
+      ) : (
+        operationNodes
+      )}
       <div className="operation-stack-add">
-        <Button
-          size="sm"
-          onClick={addOperation}
-          icon={<Plus size={16} strokeWidth={1.75} aria-hidden="true" />}
-        >
+        <Button size="sm" onClick={addOperation}>
+          <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
           Add operation
         </Button>
       </div>
@@ -163,43 +155,22 @@ export function OperationBuilder({
   );
 }
 
-function defaultValueForType(
-  type: RenameOperationDraft["op"]["type"],
-): RenameOperationDraft["op"] {
-  switch (type) {
-    case "prefix":
-      return { type: "prefix", value: "" };
-    case "suffix":
-      return { type: "suffix", value: "" };
-    case "replace":
-      return { type: "replace", find: "", replaceWith: "", caseSensitive: false };
-    case "numbering":
-      return { type: "numbering", start: 1, step: 1, padding: 1 };
-    case "case":
-      return { type: "case", mode: "upper" };
-    case "extension":
-      return { type: "extension", value: "" };
-    case "pattern":
-      return { type: "pattern", template: "" };
-  }
+interface OperationFieldsProps {
+  value: OperationValue;
+  onChange: (next: OperationValue) => void;
 }
 
-function renderOperationFields(
-  op: RenameOperationDraft,
-  _isEditing: boolean,
-  onChange: (id: string, op: any) => void,
-): JSX.Element {
-  switch (op.op.type) {
+/** Per-type field editors; exhaustive over the operation union. */
+function OperationFields({ value, onChange }: OperationFieldsProps) {
+  switch (value.type) {
     case "prefix":
       return (
         <div className="operation-field">
-          <label className="operation-field-label">Prefix text</label>
-          <input
-            type="text"
-            value={op.op.value}
-            onChange={(e) =>
-              void onChange(op.id, { ...op.op, value: e.target.value })}
+          <TextInput
+            label="Prefix text"
+            value={value.value}
             placeholder="e.g. holiday_"
+            onChange={(next) => onChange({ ...value, value: next })}
           />
           <span className="operation-hint">
             Added to the front of each filename.
@@ -209,14 +180,11 @@ function renderOperationFields(
     case "suffix":
       return (
         <div className="operation-field">
-          <label className="operation-field-label">Suffix text</label>
-          <input
-            type="text"
-            value={op.op.value}
-            onChange={(e) => {
-              void onChange(op.id, { ...op.op, value: e.target.value });
-            }}
+          <TextInput
+            label="Suffix text"
+            value={value.value}
             placeholder="e.g. _edited"
+            onChange={(next) => onChange({ ...value, value: next })}
           />
           <span className="operation-hint">
             Added before the file extension.
@@ -226,148 +194,115 @@ function renderOperationFields(
     case "replace":
       return (
         <div className="operation-fields-row">
-          <div className="operation-field">
-            <label className="operation-field-label">Find</label>
-            <input
-              type="text"
-              value={op.op.find}
-              onChange={(e) => {
-                void onChange(op.id, { ...op.op, find: e.target.value });
-              }}
-              placeholder="text to replace"
-            />
-          </div>
-          <div className="operation-field">
-            <label className="operation-field-label">Replace with</label>
-            <input
-              type="text"
-              value={op.op.replaceWith}
-              onChange={(e) => {
-                void onChange(op.id, { ...op.op, replaceWith: e.target.value });
-              }}
-              placeholder="replacement text"
-            />
-          </div>
-          <div className="operation-field">
-            <label className="operation-field-label">Case sensitive</label>
+          <TextInput
+            label="Find"
+            value={value.find}
+            placeholder="text to replace"
+            onChange={(find) => onChange({ ...value, find })}
+          />
+          <TextInput
+            label="Replace with"
+            value={value.replaceWith}
+            placeholder="replacement text"
+            onChange={(replaceWith) => onChange({ ...value, replaceWith })}
+          />
+          <label className="operation-check">
             <input
               type="checkbox"
-              checked={op.op.caseSensitive}
-              onChange={(e) => {
-                void onChange(op.id, {
-                  ...op.op,
-                  caseSensitive: e.target.checked,
-                });
-              }}
+              checked={value.caseSensitive}
+              onChange={(event) =>
+                onChange({ ...value, caseSensitive: event.target.checked })
+              }
             />
-          </div>
+            <span>Case sensitive</span>
+          </label>
         </div>
       );
-    case "numbering":
+    case "numbering": {
+      const setNumbering = (
+        field: "start" | "step" | "padding",
+        raw: string,
+      ): OperationValue => {
+        const next = validateNumbering(
+          field === "start" ? Number(raw) : value.start,
+          field === "step" ? Number(raw) : value.step,
+          field === "padding" ? Number(raw) : value.padding,
+        );
+        return { ...value, ...next };
+      };
       return (
         <div className="operation-fields-row">
-          <div className="operation-field">
-            <label className="operation-field-label">Start at</label>
+          <label className="operation-field">
+            <span className="operation-field-label">Start at</span>
             <input
+              className="input"
               type="number"
-              min="0"
-              value={op.op.start.toString()}
-              onChange={(e) => {
-                void onChange(op.id, {
-                  ...op.op,
-                  start: validateNumbering(
-                    Number(e.target.value),
-                    op.op.step,
-                    op.op.padding,
-                  ).start,
-                });
-              }}
+              min={1}
+              value={value.start}
+              onChange={(event) => onChange(setNumbering("start", event.target.value))}
             />
-          </div>
-          <div className="operation-field">
-            <label className="operation-field-label">Step</label>
+          </label>
+          <label className="operation-field">
+            <span className="operation-field-label">Step</span>
             <input
+              className="input"
               type="number"
-              min="0"
-              value={op.op.step.toString()}
-              onChange={(e) => {
-                void onChange(op.id, {
-                  ...op.op,
-                  step: validateNumbering(
-                    op.op.start,
-                    Number(e.target.value),
-                    op.op.padding,
-                  ).step,
-                });
-              }}
+              min={1}
+              value={value.step}
+              onChange={(event) => onChange(setNumbering("step", event.target.value))}
             />
-          </div>
-          <div className="operation-field">
-            <label className="operation-field-label">Padding width</label>
+          </label>
+          <label className="operation-field">
+            <span className="operation-field-label">Padding width</span>
             <input
+              className="input"
               type="number"
-              min="0"
-              max="20"
-              value={op.op.padding.toString()}
-              onChange={(e) => {
-                void onChange(op.id, {
-                  ...op.op,
-                  padding: validateNumbering(
-                    op.op.start,
-                    op.op.step,
-                    Number(e.target.value),
-                  ).padding,
-                });
-              }}
+              min={0}
+              max={20}
+              value={value.padding}
+              onChange={(event) =>
+                onChange(setNumbering("padding", event.target.value))
+              }
             />
             <span className="operation-hint">0 = no padding</span>
-          </div>
+          </label>
         </div>
       );
+    }
     case "case":
       return (
-        <div className="operation-field">
-          <label className="operation-field-label">Case mode</label>
-          <Select
-            value={op.op.mode}
-            options={CASE_MODES.map((m) => ({ value: m.value, label: m.label }))}
-            onChange={(value) => {
-              void onChange(op.id, {
-                ...op.op,
-                mode: value as "upper" | "lower" | "title",
-              });
-            }}
-            size="sm"
-          />
-        </div>
+        <Select
+          label="Case mode"
+          value={value.mode}
+          options={CASE_MODE_OPTIONS}
+          onChange={(mode) => onChange({ ...value, mode })}
+        />
       );
     case "extension":
       return (
         <div className="operation-field">
-          <label className="operation-field-label">Extension</label>
-          <input
-            type="text"
-            value={op.op.value}
-            onChange={(e) => void onChange(op.id, { ...op.op, value: e.target.value })}
+          <TextInput
+            label="Extension"
+            value={value.value}
             placeholder="e.g. png"
+            onChange={(next) => onChange({ ...value, value: next })}
           />
           <span className="operation-hint">
-            Without the leading dot. Leave empty to remove extension.
+            Without the leading dot. Leave empty to remove the extension.
           </span>
         </div>
       );
     case "pattern":
       return (
         <div className="operation-field">
-          <label className="operation-field-label">Pattern template</label>
-          <input
-            type="text"
-            value={op.op.template}
-            onChange={(e) => void onChange(op.id, { ...op.op, template: e.target.value })}
-            placeholder="{n} - {orig} - {date}"
+          <TextInput
+            label="Pattern template"
+            value={value.template}
+            placeholder="photo_{n}"
+            onChange={(template) => onChange({ ...value, template })}
           />
           <span className="operation-hint">
-            {n} = sequence number · {orig} = original name · {date} = today's date
+            {"{n}"} sequence number · {"{orig}"} original stem · {"{date}"} today
           </span>
         </div>
       );

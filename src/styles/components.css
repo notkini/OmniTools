@@ -1098,3 +1098,253 @@ button.sidebar-brand {
   background: var(--danger-subtle);
   border-color: transparent;
 }
+
+/* ---------- Batch Rename (M5, tool 2) ---------- */
+
+.workspace-preview-region {
+  display: flex;
+  flex-direction: column;
+}
+
+.rename-operations {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.operation-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.operation-stack-empty {
+  padding: var(--s3);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-md);
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+
+.operation-stack-empty-label {
+  display: block;
+}
+
+.operation-stack-add {
+  display: flex;
+}
+
+.operation-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.operation-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.operation-card-header .field {
+  flex: 1;
+  min-width: 140px;
+  margin: 0;
+}
+
+.operation-card-header .field-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.operation-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.operation-card-actions {
+  display: flex;
+  gap: var(--s1);
+}
+
+.operation-card-fields .field,
+.operation-card-fields .operation-field {
+  margin: 0;
+}
+
+.operation-fields-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s3);
+}
+
+.operation-fields-row .field,
+.operation-fields-row .operation-field {
+  margin: 0;
+  min-width: 120px;
+  flex: 1;
+}
+
+.operation-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+}
+
+.operation-field-label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.operation-check {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding-bottom: var(--s2);
+  font-size: var(--fs-sm);
+}
+
+.operation-hint {
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+/* Preview region */
+
+.preview-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.preview-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  flex-wrap: wrap;
+}
+
+.preview-title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.preview-loading-label,
+.preview-unchanged-count {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.preview-conflict-count {
+  font-size: var(--fs-sm);
+  color: var(--danger);
+}
+
+.preview-empty {
+  padding: var(--s4) var(--s3);
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+
+.preview-empty-label {
+  display: block;
+}
+
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+  table-layout: fixed;
+}
+
+.preview-table th,
+.preview-table td {
+  padding: var(--s2) var(--s2);
+  border-top: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview-table thead th {
+  border-top: none;
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.preview-col-select {
+  width: 32px;
+}
+
+.preview-col-status {
+  width: 90px;
+}
+
+.preview-file-name,
+.preview-proposed-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.preview-proposed-name--conflict {
+  color: var(--danger);
+}
+
+.preview-row--conflict .preview-file-name {
+  color: var(--text-2);
+}
+
+.preview-reason--empty {
+  color: var(--text-2);
+}
+
+.status-chip--ok {
+  color: var(--success);
+  background: var(--success-subtle);
+}
+
+.status-chip--conflict {
+  color: var(--danger);
+  background: var(--danger-subtle);
+}
+
+.status-chip--unchanged {
+  color: var(--text-2);
+  background: var(--surface-hover);
+}
+
+.workspace-note {
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
